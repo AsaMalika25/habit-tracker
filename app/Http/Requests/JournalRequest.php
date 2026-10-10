@@ -30,6 +30,7 @@ class JournalRequest extends FormRequest
             'content' => ['required', 'string', 'max:30000'],
             'mood' => ['required', Rule::in(['happy', 'sad', 'worried'])],
             'tags' => ['nullable', 'string', 'max:255'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'image_url' => ['nullable', 'url:http,https', 'max:2048'],
             'audio_url' => ['nullable', 'url:http,https', 'max:2048'],
             'action' => ['nullable', Rule::in(['save', 'publish'])],

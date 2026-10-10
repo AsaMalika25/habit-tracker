@@ -10,6 +10,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -101,7 +102,11 @@ class JournalController extends Controller
     public function update(JournalRequest $request, Journal $journal): RedirectResponse
     {
         $this->authorizeJournal($journal, $this->user($request));
+        $oldImageUrl = $journal->image_url;
         $journal->update($this->payload($request, $journal));
+        if ($oldImageUrl !== $journal->image_url) {
+            $this->deleteLocalImage($oldImageUrl);
+        }
 
         return to_route('journals.index', ['entry' => $journal->id])
             ->with('status', $journal->published_at ? 'Reflection updated in the archive.' : 'Reflection saved.');
@@ -119,7 +124,9 @@ class JournalController extends Controller
     public function destroy(Request $request, Journal $journal): RedirectResponse
     {
         $this->authorizeJournal($journal, $this->user($request));
+        $imageUrl = $journal->image_url;
         $journal->delete();
+        $this->deleteLocalImage($imageUrl);
 
         return to_route('journals.index')->with('status', 'Reflection removed from the sanctuary.');
     }
@@ -152,6 +159,12 @@ class JournalController extends Controller
     {
         $validated = $request->validated();
         $mood = $validated['mood'];
+        $imageUrl = $validated['image_url'] ?? null;
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('journals', 'public');
+            abort_if(! $path, 500, 'The image could not be saved.');
+            $imageUrl = Storage::disk('public')->url($path);
+        }
 
         return [
             'entry_date' => $validated['entry_date'],
@@ -166,12 +179,23 @@ class JournalController extends Controller
                 ->take(8)
                 ->values()
                 ->all(),
-            'image_url' => $validated['image_url'] ?? null,
+            'image_url' => $imageUrl,
             'audio_url' => $validated['audio_url'] ?? null,
             'published_at' => ($validated['action'] ?? 'save') === 'publish'
                 ? now()
                 : $journal?->published_at,
         ];
+    }
+
+    private function deleteLocalImage(?string $imageUrl): void
+    {
+        $path = parse_url($imageUrl ?? '', PHP_URL_PATH);
+        $host = parse_url($imageUrl ?? '', PHP_URL_HOST);
+        $localHost = parse_url(config('app.url'), PHP_URL_HOST);
+
+        if (is_string($path) && ($host === null || $host === $localHost) && str_starts_with($path, '/storage/journals/')) {
+            Storage::disk('public')->delete(substr($path, strlen('/storage/')));
+        }
     }
 
     private function authorizeJournal(Journal $journal, User $user): void

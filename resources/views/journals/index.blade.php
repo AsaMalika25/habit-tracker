@@ -5,9 +5,10 @@
 @section('content')
     @php
         $activeScope = $filters['scope'] ?? 'all';
-        $formDate = old('entry_date', $today->toDateString());
-        $formMood = old('mood', 'happy');
-        $formTags = old('tags', '');
+        $editingEntry = $selectedEntry && request()->boolean('edit') ? $selectedEntry : null;
+        $formDate = old('entry_date', $editingEntry?->entry_date->toDateString() ?? $today->toDateString());
+        $formMood = old('mood', $editingEntry?->mood ?? 'happy');
+        $formTags = old('tags', implode(', ', $editingEntry?->tags ?? []));
     @endphp
 
     <div class="journal-sanctuary">
@@ -27,7 +28,7 @@
                 </label>
                 <label class="sanctuary-search"><i>search</i><span class="sr-only">Search journal by title</span><input name="q" type="search" value="{{ $filters['q'] ?? '' }}" placeholder="Search journal titles..." autocomplete="off" data-journal-search></label>
                 <input name="scope" type="hidden" value="{{ $activeScope }}">
-                @if ($archiveCount > 0)
+                @if ($archiveCount > 0 && ! $editingEntry)
                     <button class="primary-button" type="button" data-open-modal="#journalModal"><i>add</i> New Entry</button>
                 @endif
             </form>
@@ -87,6 +88,10 @@
                                         @csrf @method('PATCH')
                                         <button class="entry-icon {{ $entry->is_bookmarked ? 'active' : '' }}" type="submit" aria-label="Toggle bookmark">@include('partials.icons.bookmark')</button>
                                     </form>
+                                    <form method="POST" action="{{ route('journals.destroy', $entry) }}" data-confirm="Remove this reflection permanently?">
+                                        @csrf @method('DELETE')
+                                        <button class="entry-icon entry-delete" type="submit" aria-label="Delete {{ $entry->title }}" title="Delete reflection"><i>delete</i></button>
+                                    </form>
                                 </div>
                             </div>
                         </article>
@@ -104,15 +109,16 @@
 
             @if ($archiveCount === 0 || $selectedEntry)
             <section class="sanctuary-workspace" aria-label="Journal editor">
-                @if ($archiveCount === 0)
-                <form id="journalEditor" method="POST" action="{{ route('journals.store') }}">
+                @if ($archiveCount === 0 || $editingEntry)
+                <form id="journalEditor" method="POST" action="{{ $editingEntry ? route('journals.update', $editingEntry) : route('journals.store') }}" enctype="multipart/form-data">
                     @csrf
+                    @if ($editingEntry) @method('PUT') @endif
 
                     <div class="editor-meta-bar">
                         <label>@include('partials.icons.calendar')<input name="entry_date" type="date" value="{{ $formDate }}" max="{{ $today->toDateString() }}" required></label>
                         <span><i>schedule</i>{{ $today->format('h:i A') }}</span>
                         <span class="meta-spacer"></span>
-                        <span><i>cloud</i>Private draft</span>
+                        <span><i>cloud</i>{{ $editingEntry?->published_at ? 'Archived' : 'Private draft' }}</span>
                         <span>@include('partials.icons.timer')<b id="journalReadTime">1 min read</b></span>
                     </div>
 
@@ -122,7 +128,7 @@
                         <button type="button" title="A new prompt is shown each day">@include('partials.icons.bulb')</button>
                     </div>
 
-                    <input class="journal-title-input" name="title" type="text" value="{{ old('title') }}" maxlength="160" placeholder="Title your reflection..." required autofocus>
+                    <input class="journal-title-input" name="title" type="text" value="{{ old('title', $editingEntry?->title) }}" maxlength="160" placeholder="Title your reflection..." required autofocus>
                     <span class="title-underline"></span>
 
                     <fieldset class="resonance-picker">
@@ -145,21 +151,27 @@
                         <details class="media-details">
                             <summary>@include('partials.icons.attachment') Add media</summary>
                             <div>
-                                <label>@include('partials.icons.image')<input name="image_url" type="url" value="{{ old('image_url') }}" placeholder="https://... image URL"></label>
-                                <label>@include('partials.icons.microphone')<input name="audio_url" type="url" value="{{ old('audio_url') }}" placeholder="https://... audio URL"></label>
+                                <label class="media-upload-field"><span>@include('partials.icons.image') Upload from computer</span><input name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>
+                                <label>@include('partials.icons.image')<input name="image_url" type="url" value="{{ old('image_url', $editingEntry?->image_url) }}" placeholder="https://... image URL"></label>
+                                <label>@include('partials.icons.microphone')<input name="audio_url" type="url" value="{{ old('audio_url', $editingEntry?->audio_url) }}" placeholder="https://... audio URL"></label>
                             </div>
                         </details>
                     </div>
 
-                    <textarea id="journalContent" class="journal-content-input" name="content" rows="13" maxlength="30000" placeholder="Begin with what feels present right now..." required>{{ old('content') }}</textarea>
+                    <textarea id="journalContent" class="journal-content-input" name="content" rows="13" maxlength="30000" placeholder="Begin with what feels present right now..." required>{{ old('content', $editingEntry?->content) }}</textarea>
 
                     <label class="journal-tags-input"><span><i>tag</i> Reflection tags</span><input name="tags" type="text" value="{{ $formTags }}" maxlength="255" placeholder="gratitude, mindfulness, health"></label>
 
                     <footer class="journal-editor-footer">
                         <div><span><i>check</i>Ready to save</span><span class="footer-dot"></span><span id="journalCount">0 words · 0 characters</span></div>
                         <div>
+                            @if ($editingEntry)
+                            <a class="secondary-button" href="{{ route('journals.index', array_filter(['entry' => $editingEntry->id, 'scope' => $activeScope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}">Cancel</a>
+                            <button class="primary-button" name="action" value="save" type="submit"><i>save</i> Save Changes</button>
+                            @else
                             <button class="secondary-button" name="action" value="save" type="submit"><i>save</i> Save Draft</button>
                             <button class="primary-button" name="action" value="publish" type="submit"><i>archive</i> Publish to Archive</button>
+                            @endif
                         </div>
                     </footer>
                 </form>
@@ -210,6 +222,7 @@
                         <footer class="journal-detail-footer">
                             <span><i>check_circle</i>Saved {{ $selectedEntry->updated_at->diffForHumans() }} · {{ str_word_count(strip_tags($selectedEntry->content)) }} words</span>
                             <div>
+                                <a class="journal-edit-button" href="{{ route('journals.index', array_filter(['entry' => $selectedEntry->id, 'edit' => 1, 'scope' => $activeScope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}"><i>edit</i> Edit</a>
                                 <form method="POST" action="{{ route('journals.toggle', [$selectedEntry, 'favorite']) }}">@csrf @method('PATCH')<button class="entry-icon {{ $selectedEntry->is_favorite ? 'active' : '' }}" type="submit" aria-label="Toggle favorite">@include('partials.icons.heart')</button></form>
                                 <form method="POST" action="{{ route('journals.toggle', [$selectedEntry, 'bookmark']) }}">@csrf @method('PATCH')<button class="entry-icon {{ $selectedEntry->is_bookmarked ? 'active' : '' }}" type="submit" aria-label="Toggle bookmark">@include('partials.icons.bookmark')</button></form>
                                 <form method="POST" action="{{ route('journals.destroy', $selectedEntry) }}" data-confirm="Remove this reflection permanently?">@csrf @method('DELETE')<button class="journal-delete-button" type="submit"><i>delete</i> Delete</button></form>
@@ -223,7 +236,7 @@
     </div>
 @endsection
 
-@if ($archiveCount > 0)
+@if ($archiveCount > 0 && ! request()->boolean('edit'))
     @section('modals')
         <div class="modal {{ $errors->any() ? 'open' : '' }}" id="journalModal" aria-hidden="{{ $errors->any() ? 'false' : 'true' }}">
             <button class="modal-backdrop" type="button" data-close-modal aria-label="Close dialog"></button>

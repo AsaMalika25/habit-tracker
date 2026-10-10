@@ -8,6 +8,8 @@ use App\Models\Journal;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class JournalManagementTest extends TestCase
@@ -51,7 +53,9 @@ class JournalManagementTest extends TestCase
             ->assertSee('link-symbol', false)
             ->assertSee('heart-symbol', false)
             ->assertSee('bookmark-symbol', false)
-            ->assertSee('camera-symbol', false);
+            ->assertSee('camera-symbol', false)
+            ->assertSee('name="image"', false)
+            ->assertSee('enctype="multipart/form-data"', false);
 
         $this->actingAs($user)
             ->post(route('journals.store'), [
@@ -76,6 +80,7 @@ class JournalManagementTest extends TestCase
             ->get(route('journals.index'))
             ->assertOk()
             ->assertSee('Morning Stillness')
+            ->assertSee('aria-label="Delete Morning Stillness"', false)
             ->assertDontSee('has-selected', false)
             ->assertDontSee('journal-detail', false);
 
@@ -88,7 +93,22 @@ class JournalManagementTest extends TestCase
             ->assertSee('journal-detail', false)
             ->assertSee('archive-entry-link" href="'.route('journals.index', ['scope' => 'all']), false)
             ->assertSee('journalModal', false)
+            ->assertSee(route('journals.index', ['entry' => $journal->id, 'edit' => 1, 'scope' => 'all']))
             ->assertSee('Private draft');
+
+        $this->actingAs($user)
+            ->get(route('journals.index', ['entry' => $journal->id, 'edit' => 1]))
+            ->assertOk()
+            ->assertSee('id="journalEditor"', false)
+            ->assertSee('action="'.route('journals.update', $journal).'"', false)
+            ->assertSee('name="_method" value="PUT"', false)
+            ->assertSee('value="Morning Stillness"', false)
+            ->assertSee('A quiet and deliberate beginning to the day.')
+            ->assertSee('gratitude, mindfulness')
+            ->assertSee('Save Changes')
+            ->assertSee('Cancel')
+            ->assertDontSee('journal-detail', false)
+            ->assertDontSee('journalModal', false);
 
         $this->actingAs($user)
             ->put(route('journals.update', $journal), [
@@ -118,6 +138,49 @@ class JournalManagementTest extends TestCase
             ->delete(route('journals.destroy', $journal))
             ->assertRedirectToRoute('journals.index');
         $this->assertDatabaseMissing('journals', ['id' => $journal->id]);
+    }
+
+    public function test_user_can_upload_and_delete_a_local_journal_image(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create(['timezone' => 'Asia/Jakarta']);
+
+        $this->actingAs($user)
+            ->post(route('journals.store'), [
+                'entry_date' => '2026-09-21',
+                'title' => 'Local Memory',
+                'content' => 'A photo selected from this computer.',
+                'mood' => 'happy',
+                'image' => UploadedFile::fake()->image('memory.jpg'),
+            ])
+            ->assertRedirect();
+
+        $journal = Journal::query()->whereBelongsTo($user)->sole();
+        $imagePath = parse_url($journal->image_url, PHP_URL_PATH);
+        $this->assertIsString($imagePath);
+        $this->assertStringStartsWith('/storage/journals/', $imagePath);
+        $path = substr($imagePath, strlen('/storage/'));
+        Storage::disk('public')->assertExists($path);
+
+        $this->actingAs($user)
+            ->put(route('journals.update', $journal), [
+                'entry_date' => '2026-09-21',
+                'title' => 'Updated Local Memory',
+                'content' => 'The local photo was replaced.',
+                'mood' => 'happy',
+                'image' => UploadedFile::fake()->image('replacement.png'),
+            ])
+            ->assertRedirectToRoute('journals.index', ['entry' => $journal->id]);
+
+        Storage::disk('public')->assertMissing($path);
+        $replacementPath = substr(parse_url($journal->fresh()->image_url, PHP_URL_PATH), strlen('/storage/'));
+        Storage::disk('public')->assertExists($replacementPath);
+
+        $this->actingAs($user)
+            ->delete(route('journals.destroy', $journal))
+            ->assertRedirectToRoute('journals.index');
+
+        Storage::disk('public')->assertMissing($replacementPath);
     }
 
     public function test_journal_screen_filters_entries_and_shows_completed_rituals(): void
