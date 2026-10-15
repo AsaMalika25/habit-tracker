@@ -29,12 +29,12 @@
         </label>
         <label>
             <span>Password</span>
-            <span class="auth-input"><i>lock</i><input name="password" type="password" autocomplete="new-password" minlength="8" placeholder="Minimum 8 characters" required></span>
+            <span class="auth-input has-password-toggle"><i>lock</i><input name="password" type="password" autocomplete="new-password" minlength="8" placeholder="Minimum 8 characters" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">@include('partials.icons.eye')</button></span>
             <small>Gunakan huruf besar, huruf kecil, dan angka.</small>
         </label>
         <label>
             <span>Confirm password</span>
-            <span class="auth-input"><i>verified_user</i><input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" placeholder="Repeat your password" required></span>
+            <span class="auth-input has-password-toggle"><i>verified_user</i><input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" placeholder="Repeat your password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">@include('partials.icons.eye')</button></span>
         </label>
         <button class="primary-button auth-submit" type="submit"><i>person_add</i><span data-submit-label>Create account</span></button>
     </form>

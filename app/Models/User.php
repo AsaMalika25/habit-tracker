@@ -12,8 +12,18 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
+    public const PRIMARY_ADMIN_EMAIL = 'asab6956@gmail.com';
+
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_USER = 'user';
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    protected $attributes = [
+        'role' => self::ROLE_USER,
+    ];
 
     /**
      * The attributes that are mass assignable.
@@ -48,6 +58,59 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /** @return array<string, string> */
+    public static function roleLabels(): array
+    {
+        return [
+            self::ROLE_ADMIN => 'Admin',
+            self::ROLE_USER => 'Pengguna',
+        ];
+    }
+
+    /** @return array<string, array{label: string, description: string, roles: list<string>}> */
+    public static function capabilityDefinitions(): array
+    {
+        return [
+            'manage_profile' => [
+                'label' => 'Manage own profile',
+                'description' => 'Update personal identity, timezone, and password.',
+                'roles' => [self::ROLE_ADMIN, self::ROLE_USER],
+            ],
+            'manage_personal_data' => [
+                'label' => 'Manage personal sanctuary',
+                'description' => 'Create and edit owned habits, journals, and memories.',
+                'roles' => [self::ROLE_ADMIN, self::ROLE_USER],
+            ],
+            'view_analytics' => [
+                'label' => 'View personal analytics',
+                'description' => 'Review insights calculated from owned records.',
+                'roles' => [self::ROLE_ADMIN, self::ROLE_USER],
+            ],
+            'manage_roles' => [
+                'label' => 'Manage users & roles',
+                'description' => 'View registered accounts and change their authority.',
+                'roles' => [self::ROLE_ADMIN],
+            ],
+        ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === self::ROLE_ADMIN;
+    }
+
+    public function roleLabel(): string
+    {
+        return self::roleLabels()[$this->role] ?? ucfirst($this->role);
+    }
+
+    public function hasCapability(string $capability): bool
+    {
+        $definition = self::capabilityDefinitions()[$capability] ?? null;
+
+        return $definition !== null && in_array($this->role, $definition['roles'], true);
     }
 
     public function habits(): HasMany

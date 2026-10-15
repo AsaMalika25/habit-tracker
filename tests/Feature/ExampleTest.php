@@ -31,6 +31,44 @@ class ExampleTest extends TestCase
             ->assertDontSee('New Habit');
     }
 
+    public function test_dashboard_shows_only_the_users_latest_journal(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $user->journals()->create([
+            'entry_date' => '2026-09-20',
+            'title' => 'An older reflection',
+            'content' => 'This should stay in the archive.',
+            'mood' => 'happy',
+            'mood_score' => 5,
+        ]);
+        $latest = $user->journals()->create([
+            'entry_date' => '2026-09-21',
+            'title' => 'A quieter morning',
+            'content' => 'I noticed how a slower start made the rest of the day clearer.',
+            'mood' => 'happy',
+            'mood_score' => 5,
+            'tags' => ['clarity', 'morning'],
+        ]);
+        $other->journals()->create([
+            'entry_date' => '2026-09-22',
+            'title' => 'Another user journal',
+            'content' => 'Private content.',
+            'mood' => 'sad',
+            'mood_score' => 2,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertViewHas('latestJournal', fn (Journal $journal) => $journal->is($latest))
+            ->assertSee('A quieter morning')
+            ->assertSee('I noticed how a slower start')
+            ->assertSee('href="'.route('journals.index', ['entry' => $latest]).'"', false)
+            ->assertDontSee('An older reflection')
+            ->assertDontSee('Another user journal');
+    }
+
     public function test_photobooth_saves_photos_separately_from_journals(): void
     {
         Storage::fake('public');
@@ -62,11 +100,33 @@ class ExampleTest extends TestCase
             ->assertSee('Photobooth Sanctuary')
             ->assertSee('Collage memory')
             ->assertSee('data-photo-filter="collage"', false)
+            ->assertSee('data-photo-background="newspaper"', false)
+            ->assertSee('data-photo-background="film"', false)
+            ->assertSee('data-photo-background="notebook"', false)
             ->assertSee('data-collage-progress', false)
+            ->assertSee('data-share-photo', false)
             ->assertSee(asset('storage/'.$photo->path), false)
             ->assertDontSee('https://example.com/garden.jpg', false)
             ->assertSee('data-open-photobooth', false)
             ->assertSee('Photobooth');
+
+        $otherPhoto = User::factory()->create()->photos()->create([
+            'path' => 'photobooth/private.jpg',
+            'filter' => 'noir',
+            'captured_at' => now()->addMinute(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('memories.keepsakes'))
+            ->assertOk()
+            ->assertViewIs('memories.keepsakes')
+            ->assertViewHas('memories', fn ($memories) => $memories->count() === 1)
+            ->assertSee('Keepsakes')
+            ->assertSee('data-open-keepsake', false)
+            ->assertSee('data-keepsake-dialog', false)
+            ->assertSee('data-share-keepsake', false)
+            ->assertSee(asset('storage/'.$photo->path), false)
+            ->assertDontSee(asset('storage/'.$otherPhoto->path), false);
     }
 
     public function test_timeline_groups_past_habits_and_journals_without_leaking_data(): void

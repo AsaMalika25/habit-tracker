@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Authentication\AuthenticatedSessionController;
 use App\Http\Controllers\Authentication\RegisteredUserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HabitController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\MemoryController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -19,6 +21,7 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
+    Route::get('/analytics', AnalyticsController::class)->name('analytics');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
     Route::controller(HabitController::class)->prefix('habits')->name('habits.')->group(function () {
@@ -38,6 +41,12 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/memories/timeline', [MemoryController::class, 'timeline'])->name('memories.timeline');
+    Route::get('/memories/keepsakes', [MemoryController::class, 'keepsakes'])->name('memories.keepsakes');
     Route::get('/memories/photobooth', [MemoryController::class, 'photobooth'])->name('memories.photobooth');
     Route::post('/memories/photobooth/photos', [MemoryController::class, 'store'])->name('memories.photos.store');
+
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::patch('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile.update');
+    Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->middleware('throttle:6,1')->name('settings.password.update');
+    Route::patch('/settings/users/{member}/role', [SettingsController::class, 'updateRole'])->name('settings.users.role');
 });

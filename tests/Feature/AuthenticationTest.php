@@ -16,6 +16,7 @@ class AuthenticationTest extends TestCase
     {
         $this->get(route('dashboard'))->assertRedirectToRoute('login');
         $this->get(route('habits.index'))->assertRedirectToRoute('login');
+        $this->get(route('memories.keepsakes'))->assertRedirectToRoute('login');
     }
 
     public function test_user_can_register_and_is_logged_in(): void
@@ -26,6 +27,7 @@ class AuthenticationTest extends TestCase
             'timezone' => 'Asia/Jakarta',
             'password' => 'Secure123',
             'password_confirmation' => 'Secure123',
+            'role' => 'admin',
         ]);
 
         $response->assertRedirectToRoute('dashboard');
@@ -34,6 +36,7 @@ class AuthenticationTest extends TestCase
             'name' => 'Alya Putri',
             'email' => 'alya@example.com',
             'timezone' => 'Asia/Jakarta',
+            'role' => User::ROLE_USER,
         ]);
     }
 

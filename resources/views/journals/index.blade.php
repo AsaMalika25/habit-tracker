@@ -7,7 +7,7 @@
         $activeScope = $filters['scope'] ?? 'all';
         $editingEntry = $selectedEntry && request()->boolean('edit') ? $selectedEntry : null;
         $formDate = old('entry_date', $editingEntry?->entry_date->toDateString() ?? $today->toDateString());
-        $formMood = old('mood', $editingEntry?->mood ?? 'happy');
+        $formMood = old('mood', $editingEntry?->mood);
         $formTags = old('tags', implode(', ', $editingEntry?->tags ?? []));
     @endphp
 
@@ -110,70 +110,10 @@
             @if ($archiveCount === 0 || $selectedEntry)
             <section class="sanctuary-workspace" aria-label="Journal editor">
                 @if ($archiveCount === 0 || $editingEntry)
-                <form id="journalEditor" method="POST" action="{{ $editingEntry ? route('journals.update', $editingEntry) : route('journals.store') }}" enctype="multipart/form-data">
+                <form id="journalEditor" class="journal-editor-form" method="POST" action="{{ $editingEntry ? route('journals.update', $editingEntry) : route('journals.store') }}" enctype="multipart/form-data">
                     @csrf
                     @if ($editingEntry) @method('PUT') @endif
-
-                    <div class="editor-meta-bar">
-                        <label>@include('partials.icons.calendar')<input name="entry_date" type="date" value="{{ $formDate }}" max="{{ $today->toDateString() }}" required></label>
-                        <span><i>schedule</i>{{ $today->format('h:i A') }}</span>
-                        <span class="meta-spacer"></span>
-                        <span><i>cloud</i>{{ $editingEntry?->published_at ? 'Archived' : 'Private draft' }}</span>
-                        <span>@include('partials.icons.timer')<b id="journalReadTime">1 min read</b></span>
-                    </div>
-
-                    <div class="guided-reflection">
-                        <span class="guided-icon">@include('partials.icons.bulb')</span>
-                        <div><small>Today's Guided Reflection</small><p>“{{ $prompt }}”</p></div>
-                        <button type="button" title="A new prompt is shown each day">@include('partials.icons.bulb')</button>
-                    </div>
-
-                    <input class="journal-title-input" name="title" type="text" value="{{ old('title', $editingEntry?->title) }}" maxlength="160" placeholder="Title your reflection..." required autofocus>
-                    <span class="title-underline"></span>
-
-                    <fieldset class="resonance-picker">
-                        <legend>Current Resonance</legend>
-                        <div>
-                            @foreach ($moods as $key => $mood)
-                                <label class="{{ $formMood === $key ? 'active' : '' }}"><input name="mood" type="radio" value="{{ $key }}" @checked($formMood === $key) required><span>@if (($mood['icon'] ?? null) === 'ground')@include('partials.icons.ground')@else{{ $mood['emoji'] }}@endif {{ $mood['label'] }}</span></label>
-                            @endforeach
-                        </div>
-                    </fieldset>
-
-                    <div class="journal-formatbar" aria-label="Formatting tools">
-                        <div>
-                            <button type="button" data-journal-format="bold" title="Bold"><strong class="format-letter">B</strong></button>
-                            <button type="button" data-journal-format="italic" title="Italic"><em class="format-letter">I</em></button>
-                            <button type="button" data-journal-format="list" title="List">@include('partials.icons.list')</button>
-                            <button type="button" data-journal-format="quote" title="Quote">@include('partials.icons.quote')</button>
-                            <button type="button" data-journal-format="link" title="Link">@include('partials.icons.link')</button>
-                        </div>
-                        <details class="media-details">
-                            <summary>@include('partials.icons.attachment') Add media</summary>
-                            <div>
-                                <label class="media-upload-field"><span>@include('partials.icons.image') Upload from computer</span><input name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>
-                                <label>@include('partials.icons.image')<input name="image_url" type="url" value="{{ old('image_url', $editingEntry?->image_url) }}" placeholder="https://... image URL"></label>
-                                <label>@include('partials.icons.microphone')<input name="audio_url" type="url" value="{{ old('audio_url', $editingEntry?->audio_url) }}" placeholder="https://... audio URL"></label>
-                            </div>
-                        </details>
-                    </div>
-
-                    <textarea id="journalContent" class="journal-content-input" name="content" rows="13" maxlength="30000" placeholder="Begin with what feels present right now..." required>{{ old('content', $editingEntry?->content) }}</textarea>
-
-                    <label class="journal-tags-input"><span><i>tag</i> Reflection tags</span><input name="tags" type="text" value="{{ $formTags }}" maxlength="255" placeholder="gratitude, mindfulness, health"></label>
-
-                    <footer class="journal-editor-footer">
-                        <div><span><i>check</i>Ready to save</span><span class="footer-dot"></span><span id="journalCount">0 words · 0 characters</span></div>
-                        <div>
-                            @if ($editingEntry)
-                            <a class="secondary-button" href="{{ route('journals.index', array_filter(['entry' => $editingEntry->id, 'scope' => $activeScope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}">Cancel</a>
-                            <button class="primary-button" name="action" value="save" type="submit"><i>save</i> Save Changes</button>
-                            @else
-                            <button class="secondary-button" name="action" value="save" type="submit"><i>save</i> Save Draft</button>
-                            <button class="primary-button" name="action" value="publish" type="submit"><i>archive</i> Publish to Archive</button>
-                            @endif
-                        </div>
-                    </footer>
+                    @include('journals.partials.editor-fields')
                 </form>
 
                 @elseif ($selectedEntry)
@@ -236,27 +176,22 @@
     </div>
 @endsection
 
-@if ($archiveCount > 0 && ! request()->boolean('edit'))
+@if ($archiveCount > 0 && ! $editingEntry)
     @section('modals')
         <div class="modal {{ $errors->any() ? 'open' : '' }}" id="journalModal" aria-hidden="{{ $errors->any() ? 'false' : 'true' }}">
-            <button class="modal-backdrop" type="button" data-close-modal aria-label="Close dialog"></button>
-            <form class="modal-card journal-modal-card" method="POST" action="{{ route('journals.store') }}" role="dialog" aria-modal="true" aria-labelledby="journalModalTitle">
+            <button class="modal-backdrop" type="button" data-close-modal aria-label="Close new journal form"></button>
+            <form class="modal-card journal-modal-card journal-editor-form" method="POST" action="{{ route('journals.store') }}" enctype="multipart/form-data" role="dialog" aria-modal="true" aria-labelledby="journalModalTitle">
                 @csrf
-                <input name="action" type="hidden" value="save">
                 <button class="modal-close" type="button" data-close-modal aria-label="Close"><i>close</i></button>
-                <span class="modal-icon"><i>edit_note</i></span><small>Create a mindful note</small><h2 id="journalModalTitle">New Entry</h2>
-                <label>Date<input name="entry_date" type="date" value="{{ old('entry_date', $today->toDateString()) }}" max="{{ $today->toDateString() }}" required></label>
-                <label>Title<input name="title" type="text" value="{{ old('title') }}" maxlength="160" placeholder="Title your reflection" required></label>
-                <fieldset class="modal-moods">
-                    <legend>Mood</legend>
-                    <div>
-                        @foreach ($moods as $key => $mood)
-                            <label><input name="mood" type="radio" value="{{ $key }}" @checked(old('mood', 'happy') === $key) required><span>{{ $mood['emoji'] }} {{ $mood['label'] }}</span></label>
-                        @endforeach
-                    </div>
-                </fieldset>
-                <label>Reflection<textarea name="content" rows="7" maxlength="30000" placeholder="What feels present right now?" required>{{ old('content') }}</textarea></label>
-                <div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancel</button><button class="primary-button" type="submit"><i>save</i> Save Draft</button></div>
+                <span class="modal-icon"><i>edit_note</i></span>
+                <small>Create a mindful note</small>
+                <h2 id="journalModalTitle">New Entry</h2>
+                @include('journals.partials.editor-fields', [
+                    'editingEntry' => null,
+                    'formDate' => old('entry_date', $today->toDateString()),
+                    'formMood' => old('mood'),
+                    'formTags' => old('tags', ''),
+                ])
             </form>
         </div>
     @endsection

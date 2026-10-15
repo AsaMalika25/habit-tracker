@@ -32,7 +32,7 @@ class MemoryController extends Controller
 
         return view('memories.photobooth', [
             'user' => $user,
-            'memories' => (clone $photos)->latest('captured_at')->limit(8)->get(),
+            'memories' => (clone $photos)->latest('captured_at')->limit(5)->get(),
             'memoryCount' => $photos->count(),
             'completedToday' => $completedToday,
             'sidebarTotalHabits' => $sidebarTotalHabits,
@@ -84,6 +84,30 @@ class MemoryController extends Controller
             'timeline' => $timeline,
             'completedHabitCount' => $habitLogs->count(),
             'journalCount' => $journals->count(),
+            'completedToday' => $completedToday,
+            'sidebarTotalHabits' => $sidebarTotalHabits,
+            'totalHabits' => $sidebarTotalHabits,
+            'streak' => $streak->current_streak,
+            'streakStatus' => $this->streakService->status($streak, $today),
+        ]);
+    }
+
+    public function keepsakes(Request $request): View
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        $today = CarbonImmutable::now($user->timezone);
+        $todayHabits = $user->habits()->active()->forDate($today->toDateString());
+        $sidebarTotalHabits = (clone $todayHabits)->count();
+        $completedToday = (clone $todayHabits)
+            ->whereHas('logs', fn ($query) => $query->whereDate('log_date', $today->toDateString()))
+            ->count();
+        $streak = $this->streakService->recalculate($user, $today->startOfDay());
+
+        return view('memories.keepsakes', [
+            'user' => $user,
+            'memories' => $user->photos()->latest('captured_at')->latest('id')->paginate(24),
             'completedToday' => $completedToday,
             'sidebarTotalHabits' => $sidebarTotalHabits,
             'totalHabits' => $sidebarTotalHabits,

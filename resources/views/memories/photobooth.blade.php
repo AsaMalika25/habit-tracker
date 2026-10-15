@@ -17,7 +17,7 @@
                 <p>Keep the quiet, joyful, and ordinary moments that make your days feel like your own.</p>
                 <div class="memory-actions">
                     <button class="primary-button" type="button" data-open-photobooth><i>add_a_photo</i> Add photo</button>
-                    <a class="memory-secondary-action" href="#keepsakes"><i>collections</i> View keepsakes</a>
+                    <a class="memory-secondary-action" href="{{ route('memories.keepsakes') }}"><i>collections</i> View keepsakes</a>
                 </div>
                 <div class="memory-summary">
                     <span><strong>{{ $memoryCount }}</strong> memories held</span>
@@ -94,6 +94,7 @@
             <div class="photobooth-viewport">
                 <video data-camera-video autoplay muted playsinline></video>
                 <canvas data-camera-canvas hidden></canvas>
+                <div class="photobooth-background-preview" data-background-preview aria-hidden="true"><span>Aura Daily</span></div>
                 <div class="photobooth-message" data-camera-message>
                     <i>videocam</i>
                     <p>Preparing your camera…</p>
@@ -122,10 +123,28 @@
                 </div>
             </fieldset>
 
+            <fieldset class="photobooth-backgrounds">
+                <legend>Choose a background</legend>
+                <div>
+                    @foreach ([
+                        'none' => ['None', 'crop_free'],
+                        'newspaper' => ['Newspaper', 'newspaper'],
+                        'film' => ['Film', 'movie'],
+                        'notebook' => ['Notebook', 'menu_book'],
+                    ] as $background => [$label, $icon])
+                        <button class="{{ $background === 'none' ? 'active' : '' }}" type="button" data-photo-background="{{ $background }}" aria-pressed="{{ $background === 'none' ? 'true' : 'false' }}">
+                            <span class="background-preview background-preview--{{ $background }}"><i>{{ $icon }}</i></span>
+                            <span>{{ $label }}</span>
+                        </button>
+                    @endforeach
+                </div>
+            </fieldset>
+
             <footer class="photobooth-controls">
                 <button class="memory-secondary-action" type="button" data-close-photobooth>Cancel</button>
                 <button class="memory-secondary-action" type="button" data-retake-photo hidden><i>refresh</i> Retake</button>
                 <button class="photobooth-shutter" type="button" data-capture-photo disabled aria-label="Take photo"><span><i>photo_camera</i></span></button>
+                <button class="memory-secondary-action" type="button" data-share-photo hidden><i>share</i><span data-share-label>Share</span></button>
                 <button class="primary-button" type="button" data-save-photo hidden><i>save</i> Save memory</button>
             </footer>
         </form>

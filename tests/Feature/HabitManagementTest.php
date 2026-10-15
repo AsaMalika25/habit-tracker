@@ -34,6 +34,8 @@ class HabitManagementTest extends TestCase
             ->assertOk()
             ->assertDontSee('Quick Entry')
             ->assertDontSee('Search habits, notes...')
+            ->assertSee('Start time')
+            ->assertSee('End time')
             ->assertSee('New Habit');
 
         $this->actingAs($user)
@@ -41,11 +43,15 @@ class HabitManagementTest extends TestCase
                 'title' => 'Read for 20 minutes',
                 'category' => 'productivity',
                 'start_date' => '2026-09-21',
+                'start_time' => '07:30',
+                'end_time' => '08:15',
             ])
             ->assertRedirectToRoute('habits.index', ['date' => '2026-09-21']);
 
         $habit = Habit::query()->whereBelongsTo($user)->sole();
         $this->assertSame('Read for 20 minutes', $habit->title);
+        $this->assertSame('07:30', substr($habit->start_time, 0, 5));
+        $this->assertSame('08:15', substr($habit->end_time, 0, 5));
 
         UserStreak::create([
             'user_id' => $user->id,
@@ -59,6 +65,8 @@ class HabitManagementTest extends TestCase
                 'title' => 'Read for 30 minutes',
                 'category' => 'mindfulness',
                 'start_date' => '2026-09-20',
+                'start_time' => '19:00',
+                'end_time' => '19:45',
             ])
             ->assertRedirectToRoute('habits.index', ['date' => '2026-09-20']);
 
@@ -68,6 +76,9 @@ class HabitManagementTest extends TestCase
             'category' => 'mindfulness',
             'start_date' => '2026-09-20 00:00:00',
         ]);
+        $habit->refresh();
+        $this->assertSame('19:00', substr($habit->start_time, 0, 5));
+        $this->assertSame('19:45', substr($habit->end_time, 0, 5));
 
         $this->actingAs($user)
             ->delete(route('habits.destroy', $habit))
@@ -310,8 +321,10 @@ class HabitManagementTest extends TestCase
                 'title' => '',
                 'category' => 'unknown',
                 'start_date' => 'not-a-date',
+                'start_time' => '09:00',
+                'end_time' => '08:00',
             ])
             ->assertRedirect(route('habits.index'))
-            ->assertSessionHasErrors(['title', 'category']);
+            ->assertSessionHasErrors(['title', 'category', 'end_time']);
     }
 }

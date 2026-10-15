@@ -101,13 +101,38 @@
                 <div class="micro-stats"><div><small>Perfect days this month</small><b>{{ $perfectDays }} Days</b></div><div><small>Month aggregate</small><b>{{ round($monthRate) }}% Rate</b></div></div>
             </section>
 
-            <section class="journal card" id="journal">
-                <div class="journal-header"><div class="section-title"><span>Daily reflection</span><h2>Evening Sanctuary</h2></div><time>{{ $today->format('M j') }} • 8:45 PM</time></div>
-                <div class="prompt"><span><i>psychology</i> Gratitude &amp; intention prompt</span><p>“What brought unexpected peace or clarity into your rhythm today?”</p></div>
-                <div class="textarea-wrap"><textarea id="reflection" rows="5">Had a breakthrough during the morning walk. Solved the system bottleneck simply by prioritizing stillness first. When the mind stopped rushing, the clear sequence naturally revealed itself.</textarea><small id="wordCount">27 words</small></div>
-                <div class="moods"><small>Resonant state</small><div><button class="active" type="button">🌿 Calm</button><button type="button">✨ Grateful</button><button type="button">🎯 Focused</button><button type="button">⚡ Energized</button></div></div>
-                <div class="journal-actions"><div><button type="button" title="Add photo"><i>add_photo_alternate</i></button><button type="button" title="Record"><i>mic</i></button><button type="button" title="Focus mode"><i>open_in_full</i></button></div><button class="primary-button" type="button" id="saveReflection"><i>bookmark_check</i><span>Save Reflection</span></button></div>
-                <figure><img src="{{ asset('images/journal-garden.png') }}" alt="Tranquil garden at dawn"><figcaption>“Dawn walk at the botanical conservatory — {{ $today->format('M j') }}”</figcaption></figure>
+            <section class="dashboard-journal card" id="journal">
+                <header class="dashboard-journal-header">
+                    <div class="section-title"><span>Journal</span><h2>Latest Reflection</h2></div>
+                    <a class="secondary-button" href="{{ route('journals.index') }}"><i>edit_note</i> Open Journal</a>
+                </header>
+
+                @if ($latestJournal)
+                    <article class="dashboard-journal-entry">
+                        <div class="dashboard-journal-meta">
+                            <span><i>calendar_today</i>{{ $latestJournal->entry_date->format('M j, Y') }}</span>
+                            <span><i>lock</i>{{ $latestJournal->published_at ? 'Archived' : 'Private draft' }}</span>
+                        </div>
+                        <h3>{{ $latestJournal->title }}</h3>
+                        <p>{{ str($latestJournal->content)->squish()->limit(240) }}</p>
+                        @if ($latestJournal->tags)
+                            <div class="dashboard-journal-tags">
+                                @foreach (array_slice($latestJournal->tags, 0, 3) as $tag)<span>#{{ $tag }}</span>@endforeach
+                            </div>
+                        @endif
+                        <footer>
+                            <span>{{ str_word_count(strip_tags($latestJournal->content)) }} words</span>
+                            <a class="primary-button" href="{{ route('journals.index', ['entry' => $latestJournal]) }}">Read Entry</a>
+                        </footer>
+                    </article>
+                @else
+                    <div class="dashboard-journal-empty">
+                        <i>auto_stories</i>
+                        <h3>No journal entries yet</h3>
+                        <p>Record a thought, lesson, or moment from today.</p>
+                        <a class="primary-button" href="{{ route('journals.index') }}">Write First Entry</a>
+                    </div>
+                @endif
             </section>
         </aside>
     </div>

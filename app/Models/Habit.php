@@ -22,6 +22,8 @@ class Habit extends Model
         'title',
         'category',
         'start_date',
+        'start_time',
+        'end_time',
         'is_active',
     ];
 

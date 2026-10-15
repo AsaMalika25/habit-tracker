@@ -28,12 +28,14 @@ class RegisteredUserController extends Controller
             'timezone' => ['required', 'timezone:all'],
         ]);
 
-        $user = User::create([
+        $user = User::make([
             'name' => trim($validated['name']),
             'email' => Str::lower(trim($validated['email'])),
             'password' => $validated['password'],
             'timezone' => $validated['timezone'],
         ]);
+        $user->role = User::ROLE_USER;
+        $user->save();
 
         event(new Registered($user));
         Auth::login($user);

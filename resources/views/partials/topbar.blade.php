@@ -6,7 +6,15 @@
     </div>
     <div class="top-actions">
         <button class="icon-button notification" type="button" aria-label="Notifications"><i>notifications</i><span></span></button>
-        <div class="profile"><img src="{{ asset('images/elena-vance.png') }}" alt="{{ $user->name }}"><span><b>{{ $user->name }}</b><small>Mindful Tier</small></span></div>
+        @php($profileInitials = Str::of($user->name)->explode(' ')->filter()->take(2)->map(fn ($part) => Str::upper(Str::substr($part, 0, 1)))->implode(''))
+        <div class="profile">
+            @if ($user->profile_photo_path)
+                <img src="{{ asset('storage/'.$user->profile_photo_path) }}" alt="">
+            @else
+                <span class="profile-avatar" aria-hidden="true">{{ $profileInitials }}</span>
+            @endif
+            <span><b>{{ $user->name }}</b><small>{{ $user->roleLabel() }}</small></span>
+        </div>
         <form method="POST" action="{{ route('logout') }}" data-submit-once>
             @csrf
             <button class="icon-button logout-button" type="submit" aria-label="Logout" title="Logout"><i>logout</i></button>

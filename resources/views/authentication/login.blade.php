@@ -21,7 +21,7 @@
         </label>
         <label>
             <span>Password</span>
-            <span class="auth-input"><i>lock</i><input name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required></span>
+            <span class="auth-input has-password-toggle"><i>lock</i><input name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button class="password-toggle" type="button" data-password-toggle aria-label="Show password" aria-pressed="false">@include('partials.icons.eye')</button></span>
         </label>
         <label class="remember-row"><input name="remember" type="checkbox" value="1"><span>Keep me signed in</span></label>
         <button class="primary-button auth-submit" type="submit"><i>login</i><span data-submit-label>Login securely</span></button>

@@ -56,6 +56,10 @@ class DashboardController extends Controller
             : 0;
         $calendar = $this->calendar($user->id, $today, $selectedDate);
         $streak = $this->streakService->recalculate($user, $today->startOfDay());
+        $latestJournal = $user->journals()
+            ->latest('entry_date')
+            ->latest('created_at')
+            ->first();
 
         return view('dashboard', [
             'user' => $user,
@@ -73,6 +77,7 @@ class DashboardController extends Controller
             'calendar' => $calendar,
             'perfectDays' => $calendar->where('is_complete', true)->count(),
             'monthRate' => $calendar->where('is_future', false)->avg('percentage') ?? 0,
+            'latestJournal' => $latestJournal,
             'today' => $today,
         ]);
     }

@@ -75,7 +75,7 @@
                                     <button class="habit-check" type="submit" aria-label="Centang habit untuk {{ $selectedDate->toDateString() }}"><i>check</i></button>
                                 </form>
                             @endif
-                            <div><b>{{ $habit->title }}</b><small>{{ $habit->completed_on_date ? 'Selesai pada '.$selectedDate->format('M j') : 'Belum selesai pada '.$selectedDate->format('M j') }}</small></div>
+                            <div><b>{{ $habit->title }}</b><small>{{ $habit->completed_on_date ? 'Selesai pada '.$selectedDate->format('M j') : 'Belum selesai pada '.$selectedDate->format('M j') }}@if ($habit->start_time && $habit->end_time) &middot; {{ substr($habit->start_time, 0, 5) }} to {{ substr($habit->end_time, 0, 5) }}@endif</small></div>
                             <span class="streak {{ $habit->completed_on_date ? '' : 'muted' }}"><i>{{ $habit->completed_on_date ? 'task_alt' : 'schedule' }}</i>{{ $habit->completed_on_date ? 'Done' : $selectedDate->format('M j') }}</span>
                             <em class="tag {{ $category === 'mindfulness' ? 'mindful' : $category }}">{{ ucfirst($category) }}</em>
                             @unless ($habit->completed_on_date)
@@ -111,6 +111,10 @@
             <label>Ritual name<input id="newHabitName" name="title" type="text" value="{{ old('title') }}" maxlength="120" placeholder="e.g. Read for 20 minutes" required></label>
             <label>Category<select id="newHabitCategory" name="category" required><option value="health">Health &amp; Vitality</option><option value="productivity">Focus &amp; Mastery</option><option value="mindfulness">Mindfulness</option></select></label>
             <label>Start date<input name="start_date" type="date" value="{{ old('start_date', $selectedDate->toDateString()) }}" max="{{ $today->toDateString() }}" required></label>
+            <div class="habit-time-fields">
+                <label>Start time<input name="start_time" type="time" value="{{ old('start_time') }}"></label>
+                <label>End time<input name="end_time" type="time" value="{{ old('end_time') }}"></label>
+            </div>
             <div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancel</button><button class="primary-button" type="submit"><i>add</i>Create Ritual</button></div>
         </form>
     </div>
@@ -126,6 +130,10 @@
                 <label>Ritual name<input name="title" type="text" value="{{ $habit->title }}" maxlength="120" required></label>
                 <label>Category<select name="category" required><option value="health" @selected($habit->category === 'health')>Health &amp; Vitality</option><option value="productivity" @selected($habit->category === 'productivity')>Focus &amp; Mastery</option><option value="mindfulness" @selected($habit->category === 'mindfulness')>Mindfulness</option></select></label>
                 <label>Start date<input name="start_date" type="date" value="{{ $habit->start_date?->toDateString() ?? $habit->created_at->toDateString() }}" max="{{ $today->toDateString() }}" required></label>
+                <div class="habit-time-fields">
+                    <label>Start time<input name="start_time" type="time" value="{{ $habit->start_time ? substr($habit->start_time, 0, 5) : '' }}"></label>
+                    <label>End time<input name="end_time" type="time" value="{{ $habit->end_time ? substr($habit->end_time, 0, 5) : '' }}"></label>
+                </div>
                 <div class="modal-actions"><button class="secondary-button" type="button" data-close-modal>Cancel</button><button class="primary-button" type="submit"><i>save</i>Save Changes</button></div>
             </form>
         </div>

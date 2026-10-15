@@ -55,7 +55,10 @@ class JournalManagementTest extends TestCase
             ->assertSee('bookmark-symbol', false)
             ->assertSee('camera-symbol', false)
             ->assertSee('name="image"', false)
-            ->assertSee('enctype="multipart/form-data"', false);
+            ->assertSee('enctype="multipart/form-data"', false)
+            ->assertDontSee('name="mood" type="radio" value="happy" checked', false)
+            ->assertDontSee('name="mood" type="radio" value="sad" checked', false)
+            ->assertDontSee('name="mood" type="radio" value="worried" checked', false);
 
         $this->actingAs($user)
             ->post(route('journals.store'), [
@@ -92,7 +95,15 @@ class JournalManagementTest extends TestCase
             ->assertSee('has-selected', false)
             ->assertSee('journal-detail', false)
             ->assertSee('archive-entry-link" href="'.route('journals.index', ['scope' => 'all']), false)
+            ->assertSee('data-open-modal="#journalModal"', false)
             ->assertSee('journalModal', false)
+            ->assertSee('enctype="multipart/form-data"', false)
+            ->assertSee('journal-formatbar', false)
+            ->assertSee('name="image"', false)
+            ->assertSee('Reflection tags')
+            ->assertSee('Save Draft')
+            ->assertSee('Publish to Archive')
+            ->assertDontSee('name="mood" type="radio" value="happy" checked', false)
             ->assertSee(route('journals.index', ['entry' => $journal->id, 'edit' => 1, 'scope' => 'all']))
             ->assertSee('Private draft');
 

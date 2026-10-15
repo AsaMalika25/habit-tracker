@@ -1,6 +1,17 @@
 import './bootstrap';
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+        const input = button.closest('.auth-input')?.querySelector('input');
+
+        button.addEventListener('click', () => {
+            const showPassword = input.type === 'password';
+            input.type = showPassword ? 'text' : 'password';
+            button.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+            button.setAttribute('aria-pressed', String(showPassword));
+        });
+    });
+
     document.querySelectorAll('form[data-submit-once]').forEach((form) => {
         form.addEventListener('submit', (event) => {
             if (form.dataset.submitting === 'true') {
@@ -20,6 +31,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const profilePhotoInput = document.querySelector('[data-profile-photo-input]');
+    profilePhotoInput?.addEventListener('change', () => {
+        const file = profilePhotoInput.files?.[0];
+        if (!file) return;
+
+        const preview = document.querySelector('#profilePhotoPreview');
+        const fallback = document.querySelector('[data-profile-photo-fallback]');
+        const fileName = document.querySelector('[data-profile-photo-name]');
+        if (preview) {
+            preview.src = URL.createObjectURL(file);
+            preview.hidden = false;
+        }
+        if (fallback) fallback.hidden = true;
+        if (fileName) fileName.textContent = file.name;
+    });
+
     document.querySelectorAll('.filters button').forEach((button) => {
         button.addEventListener('click', () => {
             document.querySelectorAll('.filters button').forEach((item) => item.classList.remove('active'));
@@ -29,34 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 group.hidden = filter !== 'all' && group.dataset.category !== filter;
             });
         });
-    });
-
-    document.querySelectorAll('.moods button').forEach((button) => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('.moods button').forEach((item) => item.classList.remove('active'));
-            button.classList.add('active');
-        });
-    });
-
-    const reflection = document.querySelector('#reflection');
-    const wordCount = document.querySelector('#wordCount');
-    const countWords = () => {
-        const total = reflection?.value.trim().split(/\s+/).filter(Boolean).length ?? 0;
-        if (wordCount) wordCount.textContent = `${total} words`;
-    };
-    reflection?.addEventListener('input', countWords);
-    countWords();
-
-    const saveButton = document.querySelector('#saveReflection');
-    saveButton?.addEventListener('click', () => {
-        const label = saveButton.querySelector('span');
-        const icon = saveButton.querySelector('i');
-        if (label) label.textContent = 'Saved to Vault';
-        if (icon) icon.textContent = 'done';
-        window.setTimeout(() => {
-            if (label) label.textContent = 'Save Reflection';
-            if (icon) icon.textContent = 'bookmark_check';
-        }, 2200);
     });
 
     let activeModal = null;
@@ -161,6 +160,91 @@ document.addEventListener('DOMContentLoaded', () => {
         filter.addEventListener('change', () => journalSearchForm?.requestSubmit());
     });
 
+    const shareImage = async ({ file, url, title }) => {
+        if (navigator.share) {
+            const data = { title, text: 'Shared from Aura' };
+            if (file && navigator.canShare?.({ files: [file] })) {
+                data.files = [file];
+                await navigator.share(data);
+                return 'Shared';
+            }
+            if (url) {
+                data.url = url;
+                await navigator.share(data);
+                return 'Shared';
+            }
+        }
+
+        if (url && navigator.clipboard) {
+            await navigator.clipboard.writeText(url);
+            return 'Link copied';
+        }
+
+        if (file) {
+            const downloadUrl = URL.createObjectURL(file);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = file.name;
+            link.click();
+            URL.revokeObjectURL(downloadUrl);
+            return 'Downloaded';
+        }
+
+        throw new Error('Sharing is not supported on this device.');
+    };
+    const updateShareButton = (button, label) => {
+        const text = button.querySelector('[data-share-label]');
+        if (text) text.textContent = label;
+    };
+
+    const keepsakeDialog = document.querySelector('[data-keepsake-dialog]');
+    if (keepsakeDialog) {
+        const image = keepsakeDialog.querySelector('[data-keepsake-image]');
+        const title = keepsakeDialog.querySelector('[data-keepsake-title]');
+        const date = keepsakeDialog.querySelector('[data-keepsake-date]');
+        const shareButton = keepsakeDialog.querySelector('[data-share-keepsake]');
+        let trigger;
+        let shareFile;
+
+        document.querySelectorAll('[data-open-keepsake]').forEach((button) => {
+            button.addEventListener('click', () => {
+                trigger = button;
+                shareFile = null;
+                image.src = button.dataset.keepsakeSrc;
+                image.alt = button.querySelector('img').alt;
+                title.textContent = button.dataset.keepsakeTitle;
+                date.textContent = button.dataset.keepsakeDate;
+                updateShareButton(shareButton, 'Share photo');
+                keepsakeDialog.showModal();
+                const source = button.dataset.keepsakeSrc;
+                fetch(source)
+                    .then((response) => response.ok ? response.blob() : null)
+                    .then((blob) => {
+                        if (blob && image.src === source) shareFile = new File([blob], 'aura-keepsake.jpg', { type: blob.type || 'image/jpeg' });
+                    })
+                    .catch(() => {});
+            });
+        });
+        shareButton.addEventListener('click', async () => {
+            shareButton.disabled = true;
+            shareButton.setAttribute('aria-busy', 'true');
+            try {
+                const result = await shareImage({ file: shareFile, url: image.src, title: title.textContent });
+                updateShareButton(shareButton, result);
+            } catch (error) {
+                if (error.name !== 'AbortError') updateShareButton(shareButton, 'Share failed');
+            } finally {
+                shareButton.disabled = false;
+                shareButton.removeAttribute('aria-busy');
+            }
+        });
+        keepsakeDialog.querySelector('[data-close-keepsake]')?.addEventListener('click', () => keepsakeDialog.close());
+        keepsakeDialog.addEventListener('click', (event) => {
+            if (event.target === keepsakeDialog) keepsakeDialog.close();
+        });
+        keepsakeDialog.addEventListener('close', () => trigger?.focus());
+    }
+
     const photoBoothDialog = document.querySelector('[data-photobooth-dialog]');
     if (photoBoothDialog) {
         const photoForm = photoBoothDialog.querySelector('[data-photo-form]');
@@ -170,12 +254,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const cameraMessage = photoBoothDialog.querySelector('[data-camera-message]');
         const countdown = photoBoothDialog.querySelector('[data-camera-countdown]');
         const collageProgress = photoBoothDialog.querySelector('[data-collage-progress]');
+        const backgroundPreview = photoBoothDialog.querySelector('[data-background-preview]');
         const captureButton = photoBoothDialog.querySelector('[data-capture-photo]');
         const retakeButton = photoBoothDialog.querySelector('[data-retake-photo]');
+        const shareButton = photoBoothDialog.querySelector('[data-share-photo]');
         const saveButton = photoBoothDialog.querySelector('[data-save-photo]');
         const filterValue = photoBoothDialog.querySelector('[data-photo-filter-value]');
         const activeFilterLabel = photoBoothDialog.querySelector('[data-active-filter-label]');
         const filterButtons = [...photoBoothDialog.querySelectorAll('[data-photo-filter]')];
+        const backgroundButtons = [...photoBoothDialog.querySelectorAll('[data-photo-background]')];
         const filterPreviews = [...photoBoothDialog.querySelectorAll('[data-filter-preview]')];
         const filters = {
             original: 'none',
@@ -185,9 +272,11 @@ document.addEventListener('DOMContentLoaded', () => {
             glow: 'brightness(1.13) saturate(1.18) contrast(.94)',
         };
         let activeFilter = 'original';
+        let activeBackground = 'none';
         let collageMode = false;
         let collageFrames = [];
         let cameraStream;
+        let capturedFile;
 
         const stopCamera = () => {
             cameraStream?.getTracks().forEach((track) => track.stop());
@@ -199,6 +288,83 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraMessage.hidden = !message;
             cameraMessage.classList.toggle('error', isError);
             cameraMessage.querySelector('p').textContent = message;
+        };
+        const paintBackground = (context, width, height) => {
+            if (activeBackground === 'none') return;
+
+            context.save();
+            if (activeBackground === 'newspaper') {
+                const side = width * .065;
+                const top = height * .14;
+                const bottom = height * .14;
+                context.fillStyle = '#e7ddc5';
+                context.fillRect(0, 0, width, top);
+                context.fillRect(0, height - bottom, width, bottom);
+                context.fillRect(0, top, side, height - top - bottom);
+                context.fillRect(width - side, top, side, height - top - bottom);
+                context.fillStyle = '#201d18';
+                context.textAlign = 'center';
+                context.font = `700 ${Math.max(18, width * .035)}px Georgia`;
+                context.fillText('THE AURA DAILY', width / 2, top * .58);
+                context.lineWidth = Math.max(2, width * .003);
+                context.beginPath();
+                context.moveTo(side, top * .78);
+                context.lineTo(width - side, top * .78);
+                context.stroke();
+                context.lineWidth = Math.max(1, width * .0015);
+                for (let row = 1; row <= 3; row++) {
+                    const y = height - bottom + (bottom * row / 4);
+                    context.beginPath();
+                    context.moveTo(side, y);
+                    context.lineTo(width - side, y);
+                    context.stroke();
+                }
+            }
+
+            if (activeBackground === 'film') {
+                const edge = height * .12;
+                context.fillStyle = '#0b0b0c';
+                context.fillRect(0, 0, width, edge);
+                context.fillRect(0, height - edge, width, edge);
+                context.fillStyle = '#ece7da';
+                const holeWidth = width * .045;
+                const holeHeight = edge * .42;
+                for (let x = width * .025; x < width; x += width * .075) {
+                    context.fillRect(x, edge * .26, holeWidth, holeHeight);
+                    context.fillRect(x, height - edge * .68, holeWidth, holeHeight);
+                }
+            }
+
+            if (activeBackground === 'notebook') {
+                const edge = width * .065;
+                context.fillStyle = '#f2ecd9';
+                context.fillRect(0, 0, width, height * .1);
+                context.fillRect(0, height * .9, width, height * .1);
+                context.fillRect(0, height * .1, edge, height * .8);
+                context.fillRect(width - edge, height * .1, edge, height * .8);
+                context.strokeStyle = '#89a9bd';
+                context.lineWidth = Math.max(1, width * .0015);
+                for (let y = height * .035; y < height; y += height * .045) {
+                    context.beginPath();
+                    if (y < height * .1 || y > height * .9) {
+                        context.moveTo(0, y);
+                        context.lineTo(width, y);
+                    } else {
+                        context.moveTo(0, y);
+                        context.lineTo(edge, y);
+                        context.moveTo(width - edge, y);
+                        context.lineTo(width, y);
+                    }
+                    context.stroke();
+                }
+                context.strokeStyle = '#c66d69';
+                context.lineWidth = Math.max(2, width * .0025);
+                context.beginPath();
+                context.moveTo(edge * .62, 0);
+                context.lineTo(edge * .62, height);
+                context.stroke();
+            }
+            context.restore();
         };
         const renderCollage = () => {
             if (!cameraStream || !video.videoWidth) return;
@@ -249,19 +415,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.classList.toggle('active', selected);
                 button.setAttribute('aria-pressed', String(selected));
             });
+            cameraViewport.dataset.photoBackground = activeBackground;
+            backgroundButtons.forEach((button) => {
+                const selected = button.dataset.photoBackground === activeBackground;
+                button.classList.toggle('active', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
         };
         const startCamera = async () => {
             stopCamera();
             collageFrames = [];
+            capturedFile = null;
+            backgroundPreview.hidden = false;
             canvas.hidden = true;
             video.hidden = false;
             captureButton.hidden = false;
             captureButton.disabled = true;
             retakeButton.hidden = true;
+            shareButton.hidden = true;
+            updateShareButton(shareButton, 'Share');
             saveButton.hidden = true;
             countdown.hidden = true;
             syncPhotoBooth();
             filterButtons.forEach((button) => { button.disabled = false; });
+            backgroundButtons.forEach((button) => { button.disabled = false; });
             photoBoothDialog.classList.remove('is-ready');
             showMessage('Preparing your camera…');
 
@@ -315,6 +492,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     activeFilter = selectedFilter;
                 }
+                syncPhotoBooth();
+            });
+        });
+        backgroundButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                activeBackground = button.dataset.photoBackground;
                 syncPhotoBooth();
             });
         });
@@ -374,18 +557,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 context.restore();
             }
+            paintBackground(context, canvas.width, canvas.height);
             cameraViewport.classList.add('flash');
             window.setTimeout(() => cameraViewport.classList.remove('flash'), 180);
             stopCamera();
             video.hidden = true;
             canvas.hidden = false;
+            backgroundPreview.hidden = true;
             captureButton.hidden = true;
             retakeButton.hidden = false;
+            shareButton.hidden = false;
+            shareButton.disabled = true;
             saveButton.hidden = false;
             filterButtons.forEach((button) => { button.disabled = true; });
+            backgroundButtons.forEach((button) => { button.disabled = true; });
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    updateShareButton(shareButton, 'Share failed');
+                    return;
+                }
+                capturedFile = new File([blob], 'aura-photobooth.jpg', { type: 'image/jpeg' });
+                shareButton.disabled = false;
+            }, 'image/jpeg', .9);
         });
 
         retakeButton.addEventListener('click', startCamera);
+        shareButton.addEventListener('click', async () => {
+            if (!capturedFile) return;
+            shareButton.disabled = true;
+            shareButton.setAttribute('aria-busy', 'true');
+            try {
+                const result = await shareImage({ file: capturedFile, title: 'Aura Photo Booth memory' });
+                updateShareButton(shareButton, result);
+            } catch (error) {
+                if (error.name !== 'AbortError') updateShareButton(shareButton, 'Share failed');
+            } finally {
+                shareButton.disabled = false;
+                shareButton.removeAttribute('aria-busy');
+            }
+        });
         saveButton.addEventListener('click', () => {
             saveButton.disabled = true;
             saveButton.setAttribute('aria-busy', 'true');
