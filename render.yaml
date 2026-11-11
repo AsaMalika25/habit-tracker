@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: aura-habit-tracker
+    name: vibes-habit-tracker
     runtime: docker
     region: singapore
     plan: free
