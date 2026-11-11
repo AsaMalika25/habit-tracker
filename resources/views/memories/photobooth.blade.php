@@ -30,7 +30,7 @@
                 <article class="memory-polaroid memory-polaroid-back" aria-hidden="true"></article>
                 <article class="memory-polaroid">
                     <div class="memory-photo">
-                        <img src="{{ $featuredMemory ? asset('storage/'.$featuredMemory->path) : asset('images/journal-garden.png') }}" alt="Featured photobooth memory">
+                        <img src="{{ $featuredMemory ? Storage::disk('s3')->temporaryUrl($featuredMemory->path, now()->addMinutes(10)) : asset('images/journal-garden.png') }}" alt="Featured photobooth memory">
                         <span><i>favorite</i></span>
                     </div>
                     <div class="memory-polaroid-caption">
@@ -56,7 +56,7 @@
             <div class="memory-gallery">
                 @forelse ($memories as $memory)
                     <article class="memory-card">
-                        <img src="{{ asset('storage/'.$memory->path) }}" alt="Photobooth memory captured {{ $memory->captured_at->setTimezone($user->timezone)->format('F j, Y') }}">
+                        <img src="{{ Storage::disk('s3')->temporaryUrl($memory->path, now()->addMinutes(10)) }}" alt="Photobooth memory captured {{ $memory->captured_at->setTimezone($user->timezone)->format('F j, Y') }}">
                         <div class="memory-card-overlay">
                             <span>{{ $memory->captured_at->setTimezone($user->timezone)->format('M j, Y · h:i A') }}</span>
                             <h3>{{ ucfirst($memory->filter) }} memory</h3>
@@ -80,7 +80,7 @@
         </section>
     </div>
 
-    <dialog class="photobooth-dialog" data-photobooth-dialog aria-labelledby="photoboothTitle">
+    <dialog class="photobooth-dialog" data-photobooth-dialog data-face-model="{{ asset('models/mediapipe/blaze_face_short_range.tflite') }}" aria-labelledby="photoboothTitle">
         <form class="photobooth-panel" method="POST" action="{{ route('memories.photos.store') }}" enctype="multipart/form-data" data-photo-form>
             @csrf
             <input name="filter" type="hidden" value="original" data-photo-filter-value>
@@ -93,6 +93,9 @@
 
             <div class="photobooth-viewport">
                 <video data-camera-video autoplay muted playsinline></video>
+                @foreach (['glasses', 'dog', 'monkey', 'hat'] as $overlay)
+                    <img class="photobooth-camera-overlay" src="{{ asset('images/photobooth/'.$overlay.'.svg') }}" alt="" data-camera-overlay="{{ $overlay }}" aria-hidden="true" hidden>
+                @endforeach
                 <canvas data-camera-canvas hidden></canvas>
                 <div class="photobooth-background-preview" data-background-preview aria-hidden="true"><span>Aura Daily</span></div>
                 <div class="photobooth-message" data-camera-message>
@@ -108,15 +111,25 @@
                 <legend>Choose a filter</legend>
                 <div>
                     @foreach ([
-                        'original' => ['Original', 'filter_none'],
-                        'noir' => ['Noir', 'contrast'],
-                        'sepia' => ['Sepia', 'wb_sunny'],
-                        'vivid' => ['Vivid', 'palette'],
-                        'glow' => ['Glow', 'flare'],
-                        'collage' => ['Collage', 'grid_view'],
-                    ] as $filter => [$label, $icon])
+                        'original' => ['Original', 'filter_none', null],
+                        'noir' => ['Noir', 'contrast', null],
+                        'sepia' => ['Sepia', 'wb_sunny', null],
+                        'vivid' => ['Vivid', 'palette', null],
+                        'glow' => ['Glow', 'flare', null],
+                        'glasses' => ['Glasses', 'eyeglasses', 'glasses'],
+                        'dog' => ['Dog face', 'pets', 'dog'],
+                        'monkey' => ['Monkey face', 'face_2', 'monkey'],
+                        'hat' => ['Hat', 'styler', 'hat'],
+                        'collage' => ['Collage', 'grid_view', null],
+                    ] as $filter => [$label, $icon, $overlay])
                         <button class="{{ $filter === 'original' ? 'active' : '' }}" type="button" data-photo-filter="{{ $filter }}" aria-pressed="{{ $filter === 'original' ? 'true' : 'false' }}">
-                            <span class="photobooth-filter-thumb"><video class="filter-preview--{{ $filter }}" data-filter-preview autoplay muted playsinline></video><i>{{ $icon }}</i></span>
+                            <span class="photobooth-filter-thumb">
+                                <video class="filter-preview--{{ $filter }}" data-filter-preview autoplay muted playsinline></video>
+                                @if ($overlay)
+                                    <img class="photobooth-filter-overlay" src="{{ asset('images/photobooth/'.$overlay.'.svg') }}" alt="" aria-hidden="true">
+                                @endif
+                                <i>{{ $icon }}</i>
+                            </span>
                             <span>{{ $label }}</span>
                         </button>
                     @endforeach

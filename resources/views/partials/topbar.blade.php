@@ -9,7 +9,7 @@
         @php($profileInitials = Str::of($user->name)->explode(' ')->filter()->take(2)->map(fn ($part) => Str::upper(Str::substr($part, 0, 1)))->implode(''))
         <div class="profile">
             @if ($user->profile_photo_path)
-                <img src="{{ asset('storage/'.$user->profile_photo_path) }}" alt="">
+                <img src="{{ Storage::disk('s3')->temporaryUrl($user->profile_photo_path, now()->addMinutes(10)) }}" alt="">
             @else
                 <span class="profile-avatar" aria-hidden="true">{{ $profileInitials }}</span>
             @endif

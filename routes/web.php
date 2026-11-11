@@ -7,8 +7,24 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HabitController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\MemoryController;
+use App\Http\Controllers\MobileApiController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
+
+Route::prefix('api/mobile')->group(function () {
+    Route::post('/login', [MobileApiController::class, 'login'])->middleware('throttle:5,1');
+
+    Route::middleware('auth')->group(function () {
+        Route::get('/me', [MobileApiController::class, 'me']);
+        Route::post('/logout', [MobileApiController::class, 'logout']);
+        Route::get('/dashboard', [MobileApiController::class, 'dashboard']);
+        Route::get('/habits', [MobileApiController::class, 'habits']);
+        Route::post('/habits', [MobileApiController::class, 'storeHabit']);
+        Route::post('/habits/{habit}/complete', [MobileApiController::class, 'completeHabit']);
+        Route::get('/journals', [MobileApiController::class, 'journals']);
+        Route::post('/journals', [MobileApiController::class, 'storeJournal']);
+    });
+});
 
 Route::middleware('guest')->group(function () {
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
@@ -40,6 +56,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{journal}', 'destroy')->name('destroy');
     });
 
+    Route::get('/memories/drafts', [JournalController::class, 'drafts'])->name('memories.drafts');
     Route::get('/memories/timeline', [MemoryController::class, 'timeline'])->name('memories.timeline');
     Route::get('/memories/keepsakes', [MemoryController::class, 'keepsakes'])->name('memories.keepsakes');
     Route::get('/memories/photobooth', [MemoryController::class, 'photobooth'])->name('memories.photobooth');

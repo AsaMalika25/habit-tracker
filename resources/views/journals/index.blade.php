@@ -1,11 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Journal Sanctuary — Aura')
+@section('title', ($draftMode ?? false) ? 'Journal Drafts — Aura' : 'Journal Sanctuary — Aura')
 
 @section('content')
     @php
+        $draftMode = $draftMode ?? false;
+        $archiveRoute = $draftMode ? 'memories.drafts' : 'journals.index';
         $activeScope = $filters['scope'] ?? 'all';
-        $editingEntry = $selectedEntry && request()->boolean('edit') ? $selectedEntry : null;
+        $editingEntry = ! $draftMode && $selectedEntry && request()->boolean('edit') ? $selectedEntry : null;
         $formDate = old('entry_date', $editingEntry?->entry_date->toDateString() ?? $today->toDateString());
         $formMood = old('mood', $editingEntry?->mood);
         $formTags = old('tags', implode(', ', $editingEntry?->tags ?? []));
@@ -14,10 +16,10 @@
     <div class="journal-sanctuary">
         <header class="sanctuary-page-header">
             <div>
-                <p class="sanctuary-kicker">Sanctuary Archive <span></span> {{ $archiveCount }} Entries Recorded</p>
-                <h1>Mindful Journal &amp; Reflections</h1>
+                <p class="sanctuary-kicker">{{ $draftMode ? 'Private Drafts' : 'Sanctuary Archive' }} <span></span> {{ $archiveCount }} {{ $draftMode ? 'Drafts Saved' : 'Entries Recorded' }}</p>
+                <h1>{{ $draftMode ? 'Journal Drafts & Reflections' : 'Mindful Journal & Reflections' }}</h1>
             </div>
-            <form class="sanctuary-filters" method="GET" action="{{ route('journals.index') }}" data-journal-search-form>
+            <form class="sanctuary-filters" method="GET" action="{{ route($archiveRoute) }}" data-journal-search-form>
                 <label class="sanctuary-select"><i>tune</i><span class="sr-only">Filter mood</span>
                     <select name="mood" data-journal-auto-filter>
                         <option value="">All Moods</option>
@@ -28,7 +30,7 @@
                 </label>
                 <label class="sanctuary-search"><i>search</i><span class="sr-only">Search journal by title</span><input name="q" type="search" value="{{ $filters['q'] ?? '' }}" placeholder="Search journal titles..." autocomplete="off" data-journal-search></label>
                 <input name="scope" type="hidden" value="{{ $activeScope }}">
-                @if ($archiveCount > 0 && ! $editingEntry)
+                @if (! $draftMode && $archiveCount > 0 && ! $editingEntry)
                     <button class="primary-button" type="button" data-open-modal="#journalModal"><i>add</i> New Entry</button>
                 @endif
             </form>
@@ -51,7 +53,7 @@
                         'saved' => ['Saved', 'bookmark'],
                         'photos' => ['Photo Notes', 'camera'],
                     ] as $scope => [$label, $icon])
-                        <a class="{{ $activeScope === $scope ? 'active' : '' }}" href="{{ route('journals.index', array_filter(['scope' => $scope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}">
+                        <a class="{{ $activeScope === $scope ? 'active' : '' }}" href="{{ route($archiveRoute, array_filter(['scope' => $scope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}">
                             @if ($icon === 'heart')@include('partials.icons.heart')@endif
                             @if ($icon === 'bookmark')@include('partials.icons.bookmark')@endif
                             @if ($icon === 'camera')@include('partials.icons.camera')@endif
@@ -68,7 +70,7 @@
                                 <span>{{ $entry->entry_date->isToday() ? 'Today · '.$entry->created_at->format('h:i A') : $entry->entry_date->format('M j · Y') }}</span>
                                 <span class="entry-mood">@if (($mood['icon'] ?? null) === 'ground')@include('partials.icons.ground')@else{{ $mood['emoji'] }}@endif {{ $mood['label'] }}</span>
                             </div>
-                            <a class="archive-entry-link" href="{{ route('journals.index', array_filter(['entry' => $selectedEntry && $selectedEntry->is($entry) ? null : $entry->id, 'scope' => $activeScope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}">
+                            <a class="archive-entry-link" href="{{ route($archiveRoute, array_filter(['entry' => $selectedEntry && $selectedEntry->is($entry) ? null : $entry->id, 'scope' => $activeScope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}">
                                 <h2>{{ $entry->title }}</h2>
                                 <p>{{ str($entry->content)->squish()->limit(145) }}</p>
                             </a>
@@ -80,6 +82,7 @@
                                     <span>{{ str_word_count(strip_tags($entry->content)) }} words</span>
                                     @if ($entry->image_url)<span class="entry-attachment" title="Photo attached">@include('partials.icons.image')</span>@endif
                                     @if ($entry->audio_url)<span class="entry-attachment" title="Audio attached">@include('partials.icons.microphone')</span>@endif
+                                    @unless ($draftMode)
                                     <form method="POST" action="{{ route('journals.toggle', [$entry, 'favorite']) }}">
                                         @csrf @method('PATCH')
                                         <button class="entry-icon {{ $entry->is_favorite ? 'active' : '' }}" type="submit" aria-label="Toggle favorite">@include('partials.icons.heart')</button>
@@ -92,24 +95,25 @@
                                         @csrf @method('DELETE')
                                         <button class="entry-icon entry-delete" type="submit" aria-label="Delete {{ $entry->title }}" title="Delete reflection"><i>delete</i></button>
                                     </form>
+                                    @endunless
                                 </div>
                             </div>
                         </article>
                     @empty
                         <div class="archive-empty">
-                            @include('partials.icons.book')<h2>No reflections yet</h2><p>Create a quiet space for today's thoughts.</p>
+                            @include('partials.icons.book')<h2>{{ $draftMode ? 'No drafts yet' : 'No reflections yet' }}</h2><p>{{ $draftMode ? 'Drafts saved from Journal will appear here.' : "Create a quiet space for today's thoughts." }}</p>
                         </div>
                     @endforelse
                 </div>
 
                 @if ($entries->isNotEmpty())
-                    <div class="archive-count"><i>history</i>{{ $entries->count() }} memories shown</div>
+                    <div class="archive-count"><i>history</i>{{ $entries->count() }} {{ $draftMode ? 'drafts' : 'memories' }} shown</div>
                 @endif
             </aside>
 
-            @if ($archiveCount === 0 || $selectedEntry)
-            <section class="sanctuary-workspace" aria-label="Journal editor">
-                @if ($archiveCount === 0 || $editingEntry)
+            @if ((! $draftMode && $archiveCount === 0) || $selectedEntry)
+            <section class="sanctuary-workspace" aria-label="{{ $draftMode ? 'Draft viewer' : 'Journal editor' }}">
+                @if (! $draftMode && ($archiveCount === 0 || $editingEntry))
                 <form id="journalEditor" class="journal-editor-form" method="POST" action="{{ $editingEntry ? route('journals.update', $editingEntry) : route('journals.store') }}" enctype="multipart/form-data">
                     @csrf
                     @if ($editingEntry) @method('PUT') @endif
@@ -148,10 +152,11 @@
                             </div>
                         @endif
 
-                        @if ($selectedEntry->image_url || $selectedEntry->audio_url)
+                        @php($journalImageUrl = str_starts_with($selectedEntry->image_url ?? '', 'journals/') ? Storage::disk('s3')->temporaryUrl($selectedEntry->image_url, now()->addMinutes(10)) : $selectedEntry->image_url)
+                        @if ($journalImageUrl || $selectedEntry->audio_url)
                             <div class="journal-media-grid">
-                                @if ($selectedEntry->image_url)
-                                    <figure><img src="{{ $selectedEntry->image_url }}" alt="Journal attachment"><figcaption><i>photo_camera</i> Sanctuary image</figcaption></figure>
+                                @if ($journalImageUrl)
+                                    <figure><img src="{{ $journalImageUrl }}" alt="Journal attachment"><figcaption><i>photo_camera</i> Sanctuary image</figcaption></figure>
                                 @endif
                                 @if ($selectedEntry->audio_url)
                                     <div class="audio-note"><span><i>graphic_eq</i></span><div><b>Voice reflection</b><audio controls preload="metadata" src="{{ $selectedEntry->audio_url }}"></audio></div></div>
@@ -161,12 +166,14 @@
 
                         <footer class="journal-detail-footer">
                             <span><i>check_circle</i>Saved {{ $selectedEntry->updated_at->diffForHumans() }} · {{ str_word_count(strip_tags($selectedEntry->content)) }} words</span>
+                            @unless ($draftMode)
                             <div>
                                 <a class="journal-edit-button" href="{{ route('journals.index', array_filter(['entry' => $selectedEntry->id, 'edit' => 1, 'scope' => $activeScope, 'mood' => $filters['mood'] ?? null, 'q' => $filters['q'] ?? null])) }}"><i>edit</i> Edit</a>
                                 <form method="POST" action="{{ route('journals.toggle', [$selectedEntry, 'favorite']) }}">@csrf @method('PATCH')<button class="entry-icon {{ $selectedEntry->is_favorite ? 'active' : '' }}" type="submit" aria-label="Toggle favorite">@include('partials.icons.heart')</button></form>
                                 <form method="POST" action="{{ route('journals.toggle', [$selectedEntry, 'bookmark']) }}">@csrf @method('PATCH')<button class="entry-icon {{ $selectedEntry->is_bookmarked ? 'active' : '' }}" type="submit" aria-label="Toggle bookmark">@include('partials.icons.bookmark')</button></form>
                                 <form method="POST" action="{{ route('journals.destroy', $selectedEntry) }}" data-confirm="Remove this reflection permanently?">@csrf @method('DELETE')<button class="journal-delete-button" type="submit"><i>delete</i> Delete</button></form>
                             </div>
+                            @endunless
                         </footer>
                     </article>
                 @endif
@@ -176,7 +183,7 @@
     </div>
 @endsection
 
-@if ($archiveCount > 0 && ! $editingEntry)
+@if (! ($draftMode ?? false) && $archiveCount > 0 && ! $editingEntry)
     @section('modals')
         <div class="modal {{ $errors->any() ? 'open' : '' }}" id="journalModal" aria-hidden="{{ $errors->any() ? 'false' : 'true' }}">
             <button class="modal-backdrop" type="button" data-close-modal aria-label="Close new journal form"></button>

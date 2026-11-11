@@ -1,4 +1,7 @@
 import './bootstrap';
+import visionWasmLoaderPath from '@mediapipe/tasks-vision/vision_wasm_internal.js?url';
+import visionWasmBinaryPath from '@mediapipe/tasks-vision/vision_wasm_internal.wasm?url';
+import { getFaceOverlayPlacement, smoothFaceOverlay } from './face-overlay';
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-password-toggle]').forEach((button) => {
@@ -22,8 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
             form.dataset.submitting = 'true';
             const submitButton = event.submitter ?? form.querySelector('[type="submit"]');
             if (submitButton) {
-                submitButton.disabled = true;
                 submitButton.setAttribute('aria-busy', 'true');
+                window.setTimeout(() => { submitButton.disabled = true; });
             }
 
             const label = submitButton?.querySelector('[data-submit-label]');
@@ -45,6 +48,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (fallback) fallback.hidden = true;
         if (fileName) fileName.textContent = file.name;
+    });
+
+    const changedSettingsForms = new Set();
+    const settingsWarning = document.querySelector('[data-settings-warning]');
+    document.querySelectorAll('[data-settings-form]').forEach((form) => {
+        const markChanged = () => changedSettingsForms.add(form);
+        form.addEventListener('input', markChanged);
+        form.addEventListener('change', markChanged);
+        form.addEventListener('submit', () => changedSettingsForms.delete(form));
+    });
+    document.querySelectorAll('.settings-tabs a').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            if (!changedSettingsForms.size) return;
+            event.preventDefault();
+            settingsWarning.hidden = false;
+            settingsWarning.focus();
+        });
+    });
+    window.addEventListener('beforeunload', (event) => {
+        if (!changedSettingsForms.size) return;
+        event.preventDefault();
+        event.returnValue = '';
     });
 
     document.querySelectorAll('.filters button').forEach((button) => {
@@ -264,12 +289,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const filterButtons = [...photoBoothDialog.querySelectorAll('[data-photo-filter]')];
         const backgroundButtons = [...photoBoothDialog.querySelectorAll('[data-photo-background]')];
         const filterPreviews = [...photoBoothDialog.querySelectorAll('[data-filter-preview]')];
+        const cameraOverlays = [...photoBoothDialog.querySelectorAll('[data-camera-overlay]')];
+        const faceFilters = new Set(['glasses', 'dog', 'monkey', 'hat']);
         const filters = {
             original: 'none',
             noir: 'grayscale(1) contrast(1.18)',
             sepia: 'sepia(.82) contrast(1.05) saturate(.88)',
             vivid: 'saturate(1.7) contrast(1.12)',
             glow: 'brightness(1.13) saturate(1.18) contrast(.94)',
+            glasses: 'none',
+            dog: 'none',
+            monkey: 'none',
+            hat: 'none',
         };
         let activeFilter = 'original';
         let activeBackground = 'none';
@@ -277,8 +308,88 @@ document.addEventListener('DOMContentLoaded', () => {
         let collageFrames = [];
         let cameraStream;
         let capturedFile;
+        let faceDetectorPromise;
+        let faceTrackingFrame;
+        let faceTrackingSession = 0;
+        let faceTrackingFailed = false;
+        let lastFaceScan = 0;
+        let missedFaces = 0;
+        let trackedFace;
+
+        const syncCameraOverlay = () => {
+            cameraOverlays.forEach((overlay) => {
+                const visible = overlay.dataset.cameraOverlay === activeFilter && trackedFace;
+                overlay.hidden = !visible;
+                if (!visible) return;
+
+                let { x, y, width, height } = trackedFace;
+                if (collageMode) {
+                    const slot = Math.min(collageFrames.length, 3);
+                    x = ((slot % 2) + x) / 2;
+                    y = (Math.floor(slot / 2) + y) / 2;
+                    width /= 2;
+                    height /= 2;
+                }
+                overlay.style.left = `${x * 100}%`;
+                overlay.style.top = `${y * 100}%`;
+                overlay.style.width = `${width * 100}%`;
+                overlay.style.height = `${height * 100}%`;
+                overlay.style.transform = `translate(-50%,-50%) rotate(${trackedFace.angle}rad)`;
+            });
+        };
+        const getFaceDetector = () => {
+            faceDetectorPromise ??= import('@mediapipe/tasks-vision').then(({ FaceDetector }) => FaceDetector.createFromOptions(
+                { wasmLoaderPath: visionWasmLoaderPath, wasmBinaryPath: visionWasmBinaryPath },
+                {
+                    baseOptions: { modelAssetPath: photoBoothDialog.dataset.faceModel },
+                    runningMode: 'VIDEO',
+                    minDetectionConfidence: .55,
+                },
+            )).catch((error) => {
+                faceDetectorPromise = null;
+                throw error;
+            });
+            return faceDetectorPromise;
+        };
+        const trackFace = async (timestamp) => {
+            const session = faceTrackingSession;
+            if (!cameraStream) return;
+
+            if (faceFilters.has(activeFilter) && video.readyState >= 2 && timestamp - lastFaceScan >= 90 && !faceTrackingFailed) {
+                lastFaceScan = timestamp;
+                try {
+                    const detector = await getFaceDetector();
+                    if (!cameraStream || session !== faceTrackingSession) return;
+                    const detection = detector.detectForVideo(video, performance.now()).detections[0];
+                    const placement = getFaceOverlayPlacement(detection, video.videoWidth, video.videoHeight, activeFilter);
+                    if (placement) {
+                        trackedFace = smoothFaceOverlay(trackedFace, placement);
+                        missedFaces = 0;
+                    } else if (++missedFaces > 3) {
+                        trackedFace = null;
+                    }
+                    syncCameraOverlay();
+                } catch (error) {
+                    faceTrackingFailed = true;
+                    trackedFace = null;
+                    activeFilter = 'original';
+                    syncPhotoBooth();
+                    activeFilterLabel.textContent = 'Face tracking unavailable';
+                    filterButtons
+                        .filter((button) => faceFilters.has(button.dataset.photoFilter))
+                        .forEach((button) => { button.disabled = true; });
+                    console.warn('Face tracking is unavailable in this browser.', error);
+                }
+            }
+            if (session === faceTrackingSession) faceTrackingFrame = requestAnimationFrame(trackFace);
+        };
 
         const stopCamera = () => {
+            faceTrackingSession++;
+            cancelAnimationFrame(faceTrackingFrame);
+            faceTrackingFrame = null;
+            trackedFace = null;
+            syncCameraOverlay();
             cameraStream?.getTracks().forEach((track) => track.stop());
             cameraStream = null;
             video.srcObject = null;
@@ -288,6 +399,18 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraMessage.hidden = !message;
             cameraMessage.classList.toggle('error', isError);
             cameraMessage.querySelector('p').textContent = message;
+        };
+        const drawPhotoOverlay = (context, width, height) => {
+            const overlay = cameraOverlays.find((image) => image.dataset.cameraOverlay === activeFilter);
+            if (!overlay?.complete || !overlay.naturalWidth || !trackedFace) return;
+
+            const overlayWidth = trackedFace.width * width;
+            const overlayHeight = trackedFace.height * height;
+            context.save();
+            context.translate(trackedFace.x * width, trackedFace.y * height);
+            context.rotate(trackedFace.angle);
+            context.drawImage(overlay, -overlayWidth / 2, -overlayHeight / 2, overlayWidth, overlayHeight);
+            context.restore();
         };
         const paintBackground = (context, width, height) => {
             if (activeBackground === 'none') return;
@@ -402,6 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
             collageProgress.hidden = !collageMode;
             collageProgress.textContent = `Frame ${frame} of 4`;
             video.style.filter = filters[activeFilter];
+            syncCameraOverlay();
             cameraViewport.classList.toggle('is-collage', collageMode);
             if (collageMode) {
                 renderCollage();
@@ -463,6 +587,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 photoBoothDialog.classList.add('is-ready');
                 showMessage('');
                 captureButton.disabled = false;
+                faceTrackingFailed = false;
+                lastFaceScan = 0;
+                missedFaces = 0;
+                faceTrackingFrame = requestAnimationFrame(trackFace);
             } catch {
                 showMessage('Allow camera access in your browser to use Photobooth.', true);
             }
@@ -492,6 +620,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     activeFilter = selectedFilter;
                 }
+                trackedFace = null;
+                missedFaces = 0;
                 syncPhotoBooth();
             });
         });
@@ -531,10 +661,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 frame.width = canvas.width;
                 frame.height = canvas.height;
+                frameContext.save();
                 frameContext.filter = filters[activeFilter];
                 frameContext.translate(frame.width, 0);
                 frameContext.scale(-1, 1);
                 frameContext.drawImage(video, 0, 0, frame.width, frame.height);
+                frameContext.restore();
+                drawPhotoOverlay(frameContext, frame.width, frame.height);
                 collageFrames.push(frame);
                 syncPhotoBooth();
 
@@ -556,11 +689,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 context.scale(-1, 1);
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 context.restore();
+                drawPhotoOverlay(context, canvas.width, canvas.height);
             }
             paintBackground(context, canvas.width, canvas.height);
             cameraViewport.classList.add('flash');
             window.setTimeout(() => cameraViewport.classList.remove('flash'), 180);
             stopCamera();
+            cameraOverlays.forEach((overlay) => { overlay.hidden = true; });
             video.hidden = true;
             canvas.hidden = false;
             backgroundPreview.hidden = true;

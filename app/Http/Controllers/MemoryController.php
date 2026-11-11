@@ -123,9 +123,9 @@ class MemoryController extends Controller
 
         $validated = $request->validate([
             'photo' => ['required', 'image', 'mimes:jpeg', 'max:5120'],
-            'filter' => ['required', Rule::in(['original', 'noir', 'sepia', 'vivid', 'glow', 'collage'])],
+            'filter' => ['required', Rule::in(['original', 'noir', 'sepia', 'vivid', 'glow', 'glasses', 'dog', 'monkey', 'hat', 'collage'])],
         ]);
-        $path = $request->file('photo')->store('photobooth', 'public');
+        $path = $request->file('photo')->store('photobooth', 's3');
         abort_if(! $path, 500, 'The photo could not be saved.');
 
         $user->photos()->create([

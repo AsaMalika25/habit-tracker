@@ -60,7 +60,7 @@ class JournalManagementTest extends TestCase
             ->assertDontSee('name="mood" type="radio" value="sad" checked', false)
             ->assertDontSee('name="mood" type="radio" value="worried" checked', false);
 
-        $this->actingAs($user)
+        $draftResponse = $this->actingAs($user)
             ->post(route('journals.store'), [
                 'entry_date' => '2026-09-21',
                 'title' => 'Morning Stillness',
@@ -69,15 +69,27 @@ class JournalManagementTest extends TestCase
                 'tags' => 'gratitude, mindfulness, gratitude',
                 'image_url' => 'https://example.com/morning.jpg',
                 'action' => 'save',
-            ])
-            ->assertRedirect();
+            ]);
 
         $journal = Journal::query()->whereBelongsTo($user)->sole();
+        $draftResponse->assertRedirectToRoute('memories.drafts', ['entry' => $journal]);
         $this->assertIsInt($journal->id);
         $this->assertSame('Morning Stillness', $journal->title);
         $this->assertSame(['gratitude', 'mindfulness'], $journal->tags);
         $this->assertSame(5, $journal->mood_score);
         $this->assertNull($journal->published_at);
+
+        $this->actingAs($user)
+            ->get(route('memories.drafts', ['entry' => $journal]))
+            ->assertOk()
+            ->assertSee('Journal Drafts &amp; Reflections', false)
+            ->assertSee('Morning Stillness')
+            ->assertSee('Private draft')
+            ->assertSee('aria-label="Draft viewer"', false)
+            ->assertDontSee('data-open-modal="#journalModal"', false)
+            ->assertDontSee(route('journals.toggle', [$journal, 'favorite']))
+            ->assertDontSee(route('journals.destroy', $journal))
+            ->assertDontSee('journal-edit-button', false);
 
         $this->actingAs($user)
             ->get(route('journals.index'))
@@ -130,7 +142,7 @@ class JournalManagementTest extends TestCase
                 'tags' => 'focus',
                 'action' => 'publish',
             ])
-            ->assertRedirectToRoute('journals.index', ['entry' => $journal->id]);
+            ->assertRedirectToRoute('journals.index', ['entry' => $journal]);
 
         $this->assertDatabaseHas('journals', [
             'id' => $journal->id,
@@ -151,9 +163,9 @@ class JournalManagementTest extends TestCase
         $this->assertDatabaseMissing('journals', ['id' => $journal->id]);
     }
 
-    public function test_user_can_upload_and_delete_a_local_journal_image(): void
+    public function test_user_can_upload_and_delete_a_private_journal_image(): void
     {
-        Storage::fake('public');
+        Storage::fake('s3');
         $user = User::factory()->create(['timezone' => 'Asia/Jakarta']);
 
         $this->actingAs($user)
@@ -167,11 +179,15 @@ class JournalManagementTest extends TestCase
             ->assertRedirect();
 
         $journal = Journal::query()->whereBelongsTo($user)->sole();
-        $imagePath = parse_url($journal->image_url, PHP_URL_PATH);
-        $this->assertIsString($imagePath);
-        $this->assertStringStartsWith('/storage/journals/', $imagePath);
-        $path = substr($imagePath, strlen('/storage/'));
-        Storage::disk('public')->assertExists($path);
+        $path = $journal->image_url;
+        $this->assertNotNull($path);
+        $this->assertStringStartsWith('journals/', $path);
+        Storage::disk('s3')->assertExists($path);
+
+        $this->actingAs($user)
+            ->get(route('memories.drafts', ['entry' => $journal]))
+            ->assertOk()
+            ->assertSee('/'.$path.'?expiration=', false);
 
         $this->actingAs($user)
             ->put(route('journals.update', $journal), [
@@ -181,17 +197,62 @@ class JournalManagementTest extends TestCase
                 'mood' => 'happy',
                 'image' => UploadedFile::fake()->image('replacement.png'),
             ])
-            ->assertRedirectToRoute('journals.index', ['entry' => $journal->id]);
+            ->assertRedirectToRoute('memories.drafts', ['entry' => $journal]);
 
-        Storage::disk('public')->assertMissing($path);
-        $replacementPath = substr(parse_url($journal->fresh()->image_url, PHP_URL_PATH), strlen('/storage/'));
-        Storage::disk('public')->assertExists($replacementPath);
+        Storage::disk('s3')->assertMissing($path);
+        $replacementPath = $journal->fresh()->image_url;
+        $this->assertNotNull($replacementPath);
+        Storage::disk('s3')->assertExists($replacementPath);
 
         $this->actingAs($user)
             ->delete(route('journals.destroy', $journal))
             ->assertRedirectToRoute('journals.index');
 
-        Storage::disk('public')->assertMissing($replacementPath);
+        Storage::disk('s3')->assertMissing($replacementPath);
+    }
+
+    public function test_draft_archive_only_shows_the_users_unpublished_entries(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $draft = $user->journals()->create([
+            'entry_date' => '2026-09-21',
+            'title' => 'Unfinished thought',
+            'content' => 'Only the owner should see this draft.',
+            'mood' => 'happy',
+            'mood_score' => 5,
+        ]);
+        $published = $user->journals()->create([
+            'entry_date' => '2026-09-20',
+            'title' => 'Published thought',
+            'content' => 'This belongs in the journal archive.',
+            'mood' => 'happy',
+            'mood_score' => 5,
+            'published_at' => now(),
+        ]);
+        $otherDraft = $other->journals()->create([
+            'entry_date' => '2026-09-21',
+            'title' => 'Another private draft',
+            'content' => 'This belongs to another user.',
+            'mood' => 'sad',
+            'mood_score' => 2,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('memories.drafts'))
+            ->assertOk()
+            ->assertSee('href="'.route('memories.drafts').'"', false)
+            ->assertSee($draft->title)
+            ->assertDontSee($published->title)
+            ->assertDontSee($otherDraft->title);
+
+        $this->actingAs($user)
+            ->get(route('memories.drafts', ['entry' => $published]))
+            ->assertNotFound();
+
+        $this->actingAs($user)
+            ->get(route('memories.drafts', ['entry' => $otherDraft]))
+            ->assertNotFound();
     }
 
     public function test_journal_screen_filters_entries_and_shows_completed_rituals(): void

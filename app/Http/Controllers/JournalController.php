@@ -28,6 +28,16 @@ class JournalController extends Controller
 
     public function index(Request $request): View
     {
+        return $this->archive($request);
+    }
+
+    public function drafts(Request $request): View
+    {
+        return $this->archive($request, true);
+    }
+
+    private function archive(Request $request, bool $draftMode = false): View
+    {
         $user = $this->user($request);
         $today = CarbonImmutable::now($user->timezone);
         $filters = $request->validate([
@@ -39,13 +49,17 @@ class JournalController extends Controller
 
         $entriesQuery = Journal::query()
             ->where('user_id', $user->id)
+            ->when($draftMode, fn (Builder $query) => $query->whereNull('published_at'))
             ->latest('entry_date')
             ->latest('created_at');
         $this->applyFilters($entriesQuery, $filters, $today);
         $entries = $entriesQuery->get();
 
         $selectedEntry = isset($filters['entry'])
-            ? $user->journals()->whereKey($filters['entry'])->firstOrFail()
+            ? $user->journals()
+                ->when($draftMode, fn (Builder $query) => $query->whereNull('published_at'))
+                ->whereKey($filters['entry'])
+                ->firstOrFail()
             : null;
 
         $todayHabits = $user->habits()
@@ -80,13 +94,16 @@ class JournalController extends Controller
             'linkedHabits' => $linkedHabits,
             'moods' => self::MOODS,
             'prompt' => $prompts[$today->dayOfYear % count($prompts)],
-            'archiveCount' => $user->journals()->count(),
+            'archiveCount' => $user->journals()
+                ->when($draftMode, fn (Builder $query) => $query->whereNull('published_at'))
+                ->count(),
             'streak' => $streak->current_streak,
             'streakStatus' => $this->streakService->status($streak, $today),
             'completedToday' => $completedToday,
             'sidebarTotalHabits' => $sidebarTotalHabits,
             'totalHabits' => $sidebarTotalHabits,
             'filters' => $filters,
+            'draftMode' => $draftMode,
         ]);
     }
 
@@ -95,8 +112,9 @@ class JournalController extends Controller
         $user = $this->user($request);
         $journal = $user->journals()->create($this->payload($request));
 
-        return to_route('journals.index')
-            ->with('status', $journal->published_at ? 'Reflection published to the sanctuary archive.' : 'Reflection saved.');
+        return $journal->published_at
+            ? to_route('journals.index')->with('status', 'Reflection published to the sanctuary archive.')
+            : to_route('memories.drafts', ['entry' => $journal])->with('status', 'Draft saved.');
     }
 
     public function update(JournalRequest $request, Journal $journal): RedirectResponse
@@ -105,11 +123,12 @@ class JournalController extends Controller
         $oldImageUrl = $journal->image_url;
         $journal->update($this->payload($request, $journal));
         if ($oldImageUrl !== $journal->image_url) {
-            $this->deleteLocalImage($oldImageUrl);
+            $this->deletePrivateImage($oldImageUrl);
         }
 
-        return to_route('journals.index', ['entry' => $journal->id])
-            ->with('status', $journal->published_at ? 'Reflection updated in the archive.' : 'Reflection saved.');
+        return $journal->published_at
+            ? to_route('journals.index', ['entry' => $journal])->with('status', 'Reflection updated in the archive.')
+            : to_route('memories.drafts', ['entry' => $journal])->with('status', 'Draft saved.');
     }
 
     public function toggle(Request $request, Journal $journal, string $flag): RedirectResponse
@@ -126,7 +145,7 @@ class JournalController extends Controller
         $this->authorizeJournal($journal, $this->user($request));
         $imageUrl = $journal->image_url;
         $journal->delete();
-        $this->deleteLocalImage($imageUrl);
+        $this->deletePrivateImage($imageUrl);
 
         return to_route('journals.index')->with('status', 'Reflection removed from the sanctuary.');
     }
@@ -159,11 +178,13 @@ class JournalController extends Controller
     {
         $validated = $request->validated();
         $mood = $validated['mood'];
-        $imageUrl = $validated['image_url'] ?? null;
+        $imageUrl = $validated['image_url'] ?? (
+            str_starts_with($journal?->image_url ?? '', 'journals/') ? $journal->image_url : null
+        );
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('journals', 'public');
+            $path = $request->file('image')->store('journals', 's3');
             abort_if(! $path, 500, 'The image could not be saved.');
-            $imageUrl = Storage::disk('public')->url($path);
+            $imageUrl = $path;
         }
 
         return [
@@ -187,14 +208,10 @@ class JournalController extends Controller
         ];
     }
 
-    private function deleteLocalImage(?string $imageUrl): void
+    private function deletePrivateImage(?string $imageUrl): void
     {
-        $path = parse_url($imageUrl ?? '', PHP_URL_PATH);
-        $host = parse_url($imageUrl ?? '', PHP_URL_HOST);
-        $localHost = parse_url(config('app.url'), PHP_URL_HOST);
-
-        if (is_string($path) && ($host === null || $host === $localHost) && str_starts_with($path, '/storage/journals/')) {
-            Storage::disk('public')->delete(substr($path, strlen('/storage/')));
+        if (str_starts_with($imageUrl ?? '', 'journals/')) {
+            Storage::disk('s3')->delete($imageUrl);
         }
     }
 

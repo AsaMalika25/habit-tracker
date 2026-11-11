@@ -12,6 +12,7 @@
             <details class="nav-group" @if (request()->routeIs('memories.*')) open @endif>
                 <summary class="{{ request()->routeIs('memories.*') ? 'active' : '' }}"><i>photo_library</i><span>Memory</span><i class="nav-chevron">expand_more</i></summary>
                 <div class="nav-submenu">
+                    <a class="{{ request()->routeIs('memories.drafts') ? 'active' : '' }}" href="{{ route('memories.drafts') }}"><i>draft</i><span>Draft</span></a>
                     <a class="{{ request()->routeIs('memories.timeline') ? 'active' : '' }}" href="{{ route('memories.timeline') }}"><i>timeline</i><span>Timeline</span></a>
                     <a class="{{ request()->routeIs('memories.keepsakes') ? 'active' : '' }}" href="{{ route('memories.keepsakes') }}"><i>collections</i><span>Keepsakes</span></a>
                     <a class="{{ request()->routeIs('memories.photobooth') ? 'active' : '' }}" href="{{ route('memories.photobooth') }}"><i>photo_camera</i><span>Photobooth</span></a>

@@ -25,6 +25,7 @@ class StoreHabitRequest extends FormRequest
             'title' => ['required', 'string', 'max:120'],
             'category' => ['required', Rule::in(['health', 'productivity', 'mindfulness'])],
             'start_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.$today],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:start_date'],
             'start_time' => ['nullable', 'required_with:end_time', 'date_format:H:i'],
             'end_time' => ['nullable', 'required_with:start_time', 'date_format:H:i', 'after:start_time'],
         ];

@@ -71,7 +71,7 @@ class ExampleTest extends TestCase
 
     public function test_photobooth_saves_photos_separately_from_journals(): void
     {
-        Storage::fake('public');
+        Storage::fake('s3');
         $user = User::factory()->create();
         $user->journals()->create([
             'entry_date' => now()->toDateString(),
@@ -85,27 +85,32 @@ class ExampleTest extends TestCase
         $this->actingAs($user)
             ->post(route('memories.photos.store'), [
                 'photo' => UploadedFile::fake()->image('capture.jpg', 640, 480),
-                'filter' => 'collage',
+                'filter' => 'glasses',
             ])
             ->assertRedirectToRoute('memories.photobooth');
 
         $photo = $user->photos()->sole();
-        $this->assertSame('collage', $photo->filter);
-        Storage::disk('public')->assertExists($photo->path);
+        $this->assertSame('glasses', $photo->filter);
+        Storage::disk('s3')->assertExists($photo->path);
 
         $this->actingAs($user)
             ->get(route('memories.photobooth'))
             ->assertOk()
             ->assertViewIs('memories.photobooth')
             ->assertSee('Photobooth Sanctuary')
-            ->assertSee('Collage memory')
+            ->assertSee('Glasses memory')
+            ->assertSee('data-face-model=', false)
+            ->assertSee('data-photo-filter="glasses"', false)
+            ->assertSee('data-photo-filter="dog"', false)
+            ->assertSee('data-photo-filter="monkey"', false)
+            ->assertSee('data-photo-filter="hat"', false)
             ->assertSee('data-photo-filter="collage"', false)
             ->assertSee('data-photo-background="newspaper"', false)
             ->assertSee('data-photo-background="film"', false)
             ->assertSee('data-photo-background="notebook"', false)
             ->assertSee('data-collage-progress', false)
             ->assertSee('data-share-photo', false)
-            ->assertSee(asset('storage/'.$photo->path), false)
+            ->assertSee('/'.$photo->path.'?expiration=', false)
             ->assertDontSee('https://example.com/garden.jpg', false)
             ->assertSee('data-open-photobooth', false)
             ->assertSee('Photobooth');
@@ -125,8 +130,8 @@ class ExampleTest extends TestCase
             ->assertSee('data-open-keepsake', false)
             ->assertSee('data-keepsake-dialog', false)
             ->assertSee('data-share-keepsake', false)
-            ->assertSee(asset('storage/'.$photo->path), false)
-            ->assertDontSee(asset('storage/'.$otherPhoto->path), false);
+            ->assertSee('/'.$photo->path.'?expiration=', false)
+            ->assertDontSee('/'.$otherPhoto->path.'?expiration=', false);
     }
 
     public function test_timeline_groups_past_habits_and_journals_without_leaking_data(): void

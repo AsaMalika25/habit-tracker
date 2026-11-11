@@ -22,6 +22,7 @@ class Habit extends Model
         'title',
         'category',
         'start_date',
+        'end_date',
         'start_time',
         'end_time',
         'is_active',
@@ -31,6 +32,7 @@ class Habit extends Model
     {
         return [
             'start_date' => 'date',
+            'end_date' => 'date',
             'is_active' => 'boolean',
         ];
     }
