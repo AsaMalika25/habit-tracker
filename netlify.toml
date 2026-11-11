@@ -1,5 +1,0 @@
-[build]
-  command = "npm run build"
-  # laravel-vite-plugin writes compiled assets to public/build, and Laravel's
-  # static files (images, fonts, favicon) live in public/.
-  publish = "public"
